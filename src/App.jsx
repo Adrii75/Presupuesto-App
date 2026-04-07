@@ -62,6 +62,40 @@ const CHART_COLORS = [
   "#64748b"
 ];
 
+const ICONOS_CATEGORIA = {
+  "Adri": "👤",
+  "Gisela": "👤",
+  "Otros ingresos": "💼",
+  "Vivienda": "🏠",
+  "Agua": "💧",
+  "Luz": "💡",
+  "Supermercado": "🛒",
+  "Seguros (hogar, vida)": "🛡️",
+  "Teléfono (fibra + móvil)": "📱",
+  "Alarma": "🚨",
+  "Restaurante": "🍽️",
+  "Ropa": "👕",
+  "Basuras": "🗑️",
+  "IBI": "📄",
+  "Otros": "📦",
+  "Coche seguro": "🚗",
+  "Gasolina coche": "⛽",
+  "Seguro salud Adeslas": "🏥",
+  "PS5": "🎮",
+  "Netflix": "📺",
+  "Ocio": "🎉",
+  "Spotify": "🎵",
+  "Ahorro mensual": "💰",
+  "Inversión": "📈",
+  "Préstamo": "💳",
+  "Amazon": "📦",
+  "iPad": "📱"
+};
+
+function iconoCategoria(cat) {
+  return ICONOS_CATEGORIA[cat] || "•";
+}
+
 function getInitialData() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -547,7 +581,13 @@ export default function App() {
   const totalGastoAnual = categoriasGastoAnual.reduce((acc, item) => acc + item.total, 0);
   const categoriasGrafica = resumirTopCategorias(categoriasGastoAnual, 5);
   const principalGasto = categoriasGastoAnual.find((x) => x.total > 0);
-  const mediaMensualGasto = totalGastoAnual / 12;
+
+  const mesesConGasto = MESES.reduce((acc, _, i) => {
+    const t = calcTotales(data, tab, año, i);
+    return acc + (t.gastos > 0 ? 1 : 0);
+  }, 0);
+
+  const mediaMensualGasto = mesesConGasto > 0 ? totalGastoAnual / mesesConGasto : 0;
 
   return (
     <div
@@ -856,12 +896,18 @@ export default function App() {
                 </div>
 
                 <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Media mensual gasto</div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>
-                    {fmtDisplay(mediaMensualGasto)}
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>
+                    {mesesConGasto <= 1 ? "Meses con gasto" : "Media meses con gasto"}
                   </div>
+
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                    {mesesConGasto <= 1 ? mesesConGasto : fmtDisplay(mediaMensualGasto)}
+                  </div>
+
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
-                    Promedio del año seleccionado
+                    {mesesConGasto <= 1
+                      ? "Aún no hay suficiente histórico para una media útil"
+                      : `Calculado sobre ${mesesConGasto} meses con gasto`}
                   </div>
                 </div>
               </div>
@@ -958,25 +1004,46 @@ export default function App() {
 
           <div
             style={{
-              background: totales.disponible >= 0 ? "#052e16" : "#450a0a",
+              background: totales.disponible >= 0
+                ? "linear-gradient(135deg, #052e16 0%, #14532d 100%)"
+                : "linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%)",
               border: `1px solid ${totales.disponible >= 0 ? "#22c55e" : "#ef4444"}44`,
-              borderRadius: 14,
-              padding: "16px 20px",
-              marginBottom: 16,
+              borderRadius: 18,
+              padding: "18px 20px",
+              marginBottom: 18,
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "center"
+              alignItems: "center",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)"
             }}
           >
             <div>
-              <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#cbd5e1",
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  marginBottom: 4
+                }}
+              >
                 {MESES[mes]} — Dinero disponible
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: disponibleColor(totales.disponible) }}>
+
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 900,
+                  color: "#fff"
+                }}
+              >
                 {fmtDisplay(totales.disponible)}
               </div>
             </div>
-            <div style={{ fontSize: 32 }}>{totales.disponible >= 0 ? "✅" : "⚠️"}</div>
+
+            <div style={{ fontSize: 34 }}>
+              {totales.disponible >= 0 ? "✅" : "⚠️"}
+            </div>
           </div>
         </div>
       )}
@@ -1248,61 +1315,125 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
   const [abierta, setAbierta] = useState(true);
 
   return (
-    <div style={{ background: "#1e293b", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
+    <div
+      style={{
+        background: "linear-gradient(180deg, #1e293b 0%, #172033 100%)",
+        borderRadius: 18,
+        marginBottom: 16,
+        overflow: "hidden",
+        border: "1px solid #243042",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.18)"
+      }}
+    >
       <div
         onClick={() => setAbierta((a) => !a)}
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "12px 16px",
+          padding: "14px 16px",
           cursor: "pointer",
-          borderBottom: abierta ? "1px solid #0f172a" : "none"
+          borderBottom: abierta ? "1px solid #243042" : "none"
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 14 }}>{titulo}</span>
+        <span style={{ fontWeight: 800, fontSize: 15 }}>{titulo}</span>
+
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color }}>{total.toFixed(2)}€</span>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              color,
+              background: `${color}18`,
+              border: `1px solid ${color}30`,
+              padding: "6px 10px",
+              borderRadius: 999
+            }}
+          >
+            {total.toFixed(2)}€
+          </span>
           <span style={{ color: "#64748b", fontSize: 12 }}>{abierta ? "▲" : "▼"}</span>
         </div>
       </div>
 
-      {abierta && cats.map((cat) => {
-        const val = getValor(tipo, seccion, cat);
-        const tieneValor = val !== "" && val !== 0;
+      {abierta && (
+        <div style={{ padding: "10px" }}>
+          {cats.map((cat) => {
+            const val = getValor(tipo, seccion, cat);
+            const tieneValor = val !== "" && val !== 0;
 
-        return (
-          <div
-            key={cat}
-            onClick={() => editable && onTap(tipo, seccion, cat)}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "11px 16px",
-              borderBottom: "1px solid #0f172a11",
-              cursor: editable ? "pointer" : "default",
-              background: tieneValor ? `${color}08` : "transparent",
-              transition: "background 0.15s",
-              opacity: editable ? 1 : 0.7
-            }}
-          >
-            <span style={{ fontSize: 14, color: tieneValor ? "#f1f5f9" : "#64748b" }}>{cat}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span
+            return (
+              <div
+                key={cat}
+                onClick={() => editable && onTap(tipo, seccion, cat)}
                 style={{
-                  fontSize: 14,
-                  fontWeight: tieneValor ? 600 : 400,
-                  color: tieneValor ? color : "#334155"
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "12px 14px",
+                  marginBottom: 8,
+                  borderRadius: 14,
+                  border: "1px solid #223044",
+                  background: tieneValor ? "#0f172a" : "#111827",
+                  cursor: editable ? "pointer" : "default",
+                  opacity: editable ? 1 : 0.75,
+                  transition: "transform 0.15s, background 0.15s"
                 }}
               >
-                {tieneValor ? `${parseFloat(val).toFixed(2)}€` : "—"}
-              </span>
-              <span style={{ fontSize: 11, color: "#475569" }}>{editable ? "✏️" : "🔒"}</span>
-            </div>
-          </div>
-        );
-      })}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 12,
+                      display: "grid",
+                      placeItems: "center",
+                      background: `${color}18`,
+                      border: `1px solid ${color}26`,
+                      flexShrink: 0
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{iconoCategoria(cat)}</span>
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: tieneValor ? 700 : 500,
+                        color: tieneValor ? "#f8fafc" : "#94a3b8",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis"
+                      }}
+                    >
+                      {cat}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                      {editable ? "Toca para editar o añadir movimientos" : "Solo lectura"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: tieneValor ? color : "#475569"
+                    }}
+                  >
+                    {tieneValor ? `${parseFloat(val).toFixed(2)}€` : "—"}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                    {editable ? "✏️" : "🔒"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
