@@ -622,7 +622,7 @@ export default function App() {
               Presupuesto
             </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "#f8fafc" }}>
-              Familiar {año}
+              Familia García Mateo {año}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
