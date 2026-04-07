@@ -330,6 +330,7 @@ export default function App() {
   const [inputVal, setInputVal] = useState("");
   const [movFecha, setMovFecha] = useState(hoyISO());
   const [movNota, setMovNota] = useState("");
+  const [tipoMovimiento, setTipoMovimiento] = useState("gasto");
   const [errorCarga, setErrorCarga] = useState("");
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 900 : false
@@ -514,6 +515,7 @@ export default function App() {
     setInputVal(val === 0 ? "" : String(val));
     setMovFecha(hoyISO());
     setMovNota("");
+    setTipoMovimiento("gasto");
     setModalAbierto(true);
   }
 
@@ -527,14 +529,19 @@ export default function App() {
     setInputVal("");
     setMovNota("");
     setMovFecha(hoyISO());
+    setTipoMovimiento("gasto");
   }
 
   function guardarNuevoMovimiento() {
     if (!editando) return;
     if (!puedeEditarTipo(emailActual, editando.tipo)) return;
 
-    const importe = normalizarNumero(inputVal);
-    if (!inputVal || !Number.isFinite(importe)) return;
+    const importeBase = normalizarNumero(inputVal);
+    if (!inputVal || !Number.isFinite(importeBase)) return;
+
+    const importe = tipoMovimiento === "abono"
+      ? -Math.abs(importeBase)
+      : Math.abs(importeBase);
 
     agregarMovimiento(editando.tipo, editando.seccion, editando.cat, {
       importe,
@@ -545,6 +552,7 @@ export default function App() {
     setInputVal("");
     setMovNota("");
     setMovFecha(hoyISO());
+    setTipoMovimiento("gasto");
   }
 
   if (!data) {
@@ -1119,13 +1127,52 @@ export default function App() {
                   Añadir movimiento
                 </div>
 
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                    marginBottom: 12
+                  }}
+                >
+                  <button
+                    onClick={() => setTipoMovimiento("gasto")}
+                    style={{
+                      padding: "12px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: tipoMovimiento === "gasto" ? "#3b82f6" : "#334155",
+                      color: "#fff",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Gasto
+                  </button>
+
+                  <button
+                    onClick={() => setTipoMovimiento("abono")}
+                    style={{
+                      padding: "12px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: tipoMovimiento === "abono" ? "#22c55e" : "#334155",
+                      color: "#fff",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Abono / devolución
+                  </button>
+                </div>
+
                 <div style={{ position: "relative", marginBottom: 12 }}>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={inputVal}
                     onChange={(e) => setInputVal(e.target.value)}
-                    placeholder="Ej. 50 o -10"
+                    placeholder="Ej. 50"
                     style={{
                       width: "100%",
                       padding: "14px 50px 14px 14px",
@@ -1182,7 +1229,7 @@ export default function App() {
                     padding: "14px",
                     borderRadius: 12,
                     border: "none",
-                    background: "#3b82f6",
+                    background: tipoMovimiento === "abono" ? "#22c55e" : "#3b82f6",
                     color: "#fff",
                     fontSize: 15,
                     fontWeight: 600,
@@ -1190,7 +1237,7 @@ export default function App() {
                     marginBottom: 20
                   }}
                 >
-                  Añadir movimiento
+                  {tipoMovimiento === "abono" ? "Añadir abono" : "Añadir gasto"}
                 </button>
 
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
