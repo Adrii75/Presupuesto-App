@@ -1066,7 +1066,7 @@ export default function App() {
               readOnly={!puedeEditarTabActual}
               placeholder={
                 puedeEditarTabActual
-                  ? "Ej: Adeslas descontado en nómina: 62,40 €. No sumarlo como gasto aparte."
+                  ? "Ej: Adeslas descontado en nómina. Se ha revisado hasta el día X."
                   : "Sin notas"
               }
               style={{
