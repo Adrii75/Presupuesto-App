@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
 import { auth } from "./firebase";
@@ -13,6 +12,11 @@ export default function AuthGate({ children }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  const usuariosPermitidos = [
+    "adri12gg@gmail.com",
+    "mateogisela05@gmail.com",
+  ];
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -32,22 +36,21 @@ export default function AuthGate({ children }) {
     }
   }
 
-  async function registrar() {
-    setError("");
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-    } catch (e) {
-      setError("No se pudo crear la cuenta");
-    }
-  }
-
   async function salir() {
     await signOut(auth);
   }
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0f172a", color: "#fff" }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#0f172a",
+          color: "#fff",
+        }}
+      >
         Cargando...
       </div>
     );
@@ -126,24 +129,44 @@ export default function AuthGate({ children }) {
             >
               Entrar
             </button>
-
-            <button
-              onClick={registrar}
-              style={{
-                flex: 1,
-                padding: 12,
-                borderRadius: 10,
-                border: "none",
-                background: "#334155",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Crear cuenta
-            </button>
           </div>
 
           {error && <p style={{ color: "#f87171", marginTop: 12 }}>{error}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!usuariosPermitidos.includes(user.email)) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#0f172a",
+          color: "#fff",
+          padding: 20,
+          textAlign: "center",
+        }}
+      >
+        <div>
+          <h2>Acceso no autorizado</h2>
+          <p>Esta cuenta no tiene permiso para usar la aplicación.</p>
+          <button
+            onClick={salir}
+            style={{
+              marginTop: 12,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: "#334155",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Salir
+          </button>
         </div>
       </div>
     );
