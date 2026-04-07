@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { cargarPresupuesto, guardarPresupuesto } from "./presupuestoDb";
@@ -39,7 +39,7 @@ const CATEGORIAS_GISELA = {
   gastos: ["Vivienda","Coche seguro","Préstamo","Gasolina coche","Seguro salud Adeslas","Amazon","Spotify","iPad","Otros"]
 };
 
-const PRESUPUESTOS = {
+const BASE_PRESUPUESTOS = {
   familiar: { label: "Familiar", icon: "🏠", cats: CATEGORIAS_FAMILIAR },
   adri: { label: "Adri", icon: "👤", cats: CATEGORIAS_ADRI },
   gisela: { label: "Gisela", icon: "👤", cats: CATEGORIAS_GISELA }
@@ -92,9 +92,9 @@ const ICONOS_CATEGORIA = {
   "iPad": "📱"
 };
 
-function iconoCategoria(cat) {
-  return ICONOS_CATEGORIA[cat] || "•";
-}
+const EMOJIS_SUGERIDOS = [
+  "🏠","🚗","⛽","🛒","🍽️","🎮","🎵","📺","💡","💧","🧾","💳","💰","📈","🏥","🛡️","✈️","🐶","🏋️","🎁","📚","👕","📱","🧴","🍼","🛠️","📦","🎉","🍕","☕"
+];
 
 function getInitialData() {
   try {
@@ -107,6 +107,13 @@ function getInitialData() {
       familiar: {},
       adri: {},
       gisela: {}
+    },
+    _meta: {
+      customCats: {
+        familiar: { ingresos: [], gastos: [] },
+        adri: { ingresos: [], gastos: [] },
+        gisela: { ingresos: [], gastos: [] }
+      }
     }
   };
 }
@@ -145,15 +152,57 @@ function calcularValorCategoria(valorCategoria) {
   return normalizarNumero(valorCategoria);
 }
 
+function asegurarMeta(data) {
+  if (!data._meta) data._meta = {};
+  if (!data._meta.customCats) {
+    data._meta.customCats = {
+      familiar: { ingresos: [], gastos: [] },
+      adri: { ingresos: [], gastos: [] },
+      gisela: { ingresos: [], gastos: [] }
+    };
+  }
+
+  for (const tipo of ["familiar", "adri", "gisela"]) {
+    if (!data._meta.customCats[tipo]) {
+      data._meta.customCats[tipo] = { ingresos: [], gastos: [] };
+    }
+    if (!Array.isArray(data._meta.customCats[tipo].ingresos)) {
+      data._meta.customCats[tipo].ingresos = [];
+    }
+    if (!Array.isArray(data._meta.customCats[tipo].gastos)) {
+      data._meta.customCats[tipo].gastos = [];
+    }
+  }
+
+  return data;
+}
+
+function getCustomCats(data, tipo, seccion) {
+  return data?._meta?.customCats?.[tipo]?.[seccion] || [];
+}
+
+function getAllCats(data, tipo, seccion) {
+  const base = BASE_PRESUPUESTOS[tipo].cats[seccion] || [];
+  const custom = getCustomCats(data, tipo, seccion).map((x) => x.name);
+  return [...base, ...custom];
+}
+
+function getEmojiCategoria(data, tipo, seccion, cat) {
+  const custom = getCustomCats(data, tipo, seccion).find((x) => x.name === cat);
+  if (custom?.emoji) return custom.emoji;
+  return ICONOS_CATEGORIA[cat] || "•";
+}
+
 function calcTotales(data, tipo, año, mes) {
-  const cats = PRESUPUESTOS[tipo].cats;
+  const ingCats = getAllCats(data, tipo, "ingresos");
+  const gasCats = getAllCats(data, tipo, "gastos");
   const mesData = data?.[año]?.[tipo]?.[mes] || {};
 
-  const ing = cats.ingresos.reduce((s, c) => {
+  const ing = ingCats.reduce((s, c) => {
     return s + calcularValorCategoria(mesData.ingresos?.[c]);
   }, 0);
 
-  const gas = cats.gastos.reduce((s, c) => {
+  const gas = gasCats.reduce((s, c) => {
     return s + calcularValorCategoria(mesData.gastos?.[c]);
   }, 0);
 
@@ -174,7 +223,7 @@ function calcAnual(data, tipo, año) {
 }
 
 function calcCategoriaAnual(data, tipo, año, seccion) {
-  const categorias = PRESUPUESTOS[tipo].cats[seccion];
+  const categorias = getAllCats(data, tipo, seccion);
   const resultado = categorias.map((cat) => {
     let total = 0;
     for (let m = 0; m < 12; m++) {
@@ -337,6 +386,11 @@ export default function App() {
   );
   const [notaMesInput, setNotaMesInput] = useState("");
 
+  const [modalCategoriaAbierto, setModalCategoriaAbierto] = useState(false);
+  const [seccionNuevaCategoria, setSeccionNuevaCategoria] = useState("gastos");
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
+  const [emojiNuevaCategoria, setEmojiNuevaCategoria] = useState("📦");
+
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
 
@@ -362,7 +416,7 @@ export default function App() {
 
       try {
         const remoto = await cargarPresupuesto();
-        const inicial = remoto || getInitialData();
+        const inicial = asegurarMeta(remoto || getInitialData());
         setData(inicial);
 
         try {
@@ -371,7 +425,7 @@ export default function App() {
       } catch (e) {
         console.error("Error cargando presupuesto compartido:", e);
         setErrorCarga("No se pudo cargar la nube. Se ha cargado la copia local.");
-        setData(getInitialData());
+        setData(asegurarMeta(getInitialData()));
       }
     });
 
@@ -405,6 +459,7 @@ export default function App() {
   }, [data, año, mes, tab]);
 
   function asegurarRuta(next, tipo, seccion, cat) {
+    asegurarMeta(next);
     if (!next[año]) next[año] = {};
     if (!next[año][tipo]) next[año][tipo] = {};
     if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {}, notasMes: "" };
@@ -418,6 +473,7 @@ export default function App() {
   }
 
   function asegurarRutaMes(next, tipo) {
+    asegurarMeta(next);
     if (!next[año]) next[año] = {};
     if (!next[año][tipo]) next[año][tipo] = {};
     if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {}, notasMes: "" };
@@ -454,10 +510,6 @@ export default function App() {
       next[año][tipo][mes].notasMes = texto;
       return next;
     });
-  }
-
-  function getNotaMes(tipo) {
-    return data?.[año]?.[tipo]?.[mes]?.notasMes || "";
   }
 
   function convertirAMovimientosSiHaceFalta(tipo, seccion, cat) {
@@ -539,6 +591,37 @@ export default function App() {
     });
   }
 
+  function agregarCategoriaPersonalizada() {
+    if (!puedeEditarTabActual) return;
+
+    const nombre = nombreNuevaCategoria.trim();
+    const emoji = emojiNuevaCategoria || "📦";
+
+    if (!nombre) return;
+
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+
+      const yaExisteBase = BASE_PRESUPUESTOS[tab].cats[seccionNuevaCategoria].includes(nombre);
+      const yaExisteCustom = getCustomCats(next, tab, seccionNuevaCategoria).some((x) => x.name.toLowerCase() === nombre.toLowerCase());
+
+      if (yaExisteBase || yaExisteCustom) return next;
+
+      next._meta.customCats[tab][seccionNuevaCategoria].push({
+        name: nombre,
+        emoji
+      });
+
+      return next;
+    });
+
+    setNombreNuevaCategoria("");
+    setEmojiNuevaCategoria("📦");
+    setSeccionNuevaCategoria("gastos");
+    setModalCategoriaAbierto(false);
+  }
+
   function abrirEdicion(tipo, seccion, cat) {
     if (!puedeEditarTipo(emailActual, tipo)) return;
 
@@ -587,6 +670,16 @@ export default function App() {
     setTipoMovimiento("gasto");
   }
 
+  const cats = useMemo(() => {
+    if (!data) {
+      return { ingresos: [], gastos: [] };
+    }
+    return {
+      ingresos: getAllCats(data, tab, "ingresos"),
+      gastos: getAllCats(data, tab, "gastos")
+    };
+  }, [data, tab]);
+
   if (!data) {
     return (
       <div
@@ -605,7 +698,6 @@ export default function App() {
 
   const totales = calcTotales(data, tab, año, mes);
   const totalesAnuales = calcAnual(data, tab, año);
-  const cats = PRESUPUESTOS[tab].cats;
   const disponibleColor = (n) => n >= 0 ? "#22c55e" : "#ef4444";
 
   const movimientosActuales = editando ? getMovimientos(editando.tipo, editando.seccion, editando.cat) : [];
@@ -633,52 +725,57 @@ export default function App() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0f172a",
+        background: "#0b1220",
         color: "#f1f5f9",
         fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-        maxWidth: isDesktop ? 1180 : 480,
+        maxWidth: isDesktop ? 1240 : 500,
         margin: "0 auto",
         paddingBottom: 90
       }}
     >
       <div
         style={{
-          background: "linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)",
-          padding: isDesktop ? "28px 28px 18px" : "20px 20px 16px",
-          borderBottom: "1px solid #1e293b"
+          background: "radial-gradient(circle at top left, #22406b 0%, #0f172a 55%, #0b1220 100%)",
+          padding: isDesktop ? "30px 28px 20px" : "22px 18px 16px",
+          borderBottom: "1px solid #1e293b",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.25)"
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: 2, textTransform: "uppercase", marginBottom: 2 }}>
-              Presupuesto
+            <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 3 }}>
+              Presupuesto compartido
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#f8fafc" }}>
-              Familiar {año}
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#f8fafc", marginBottom: 4 }}>
+              {BASE_PRESUPUESTOS[tab].icon} {BASE_PRESUPUESTOS[tab].label} {año}
+            </div>
+            <div style={{ fontSize: 12, color: "#cbd5e1" }}>
+              {user?.email || "Sin usuario"}
             </div>
           </div>
+
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setAño((y) => y - 1)} style={btnSmall}>{año - 1}</button>
             <button onClick={() => setAño((y) => y + 1)} style={btnSmall}>{año + 1}</button>
           </div>
         </div>
 
-        <div style={{ display: "flex", background: "#1e293b", borderRadius: 10, padding: 3, marginBottom: 14 }}>
+        <div style={{ display: "flex", background: "#172033", borderRadius: 12, padding: 4, marginBottom: 14 }}>
           {["mes", "anual"].map((v) => (
             <button
               key={v}
               onClick={() => setVista(v)}
               style={{
                 flex: 1,
-                padding: "7px 0",
-                borderRadius: 8,
+                padding: "9px 0",
+                borderRadius: 10,
                 border: "none",
                 cursor: "pointer",
                 fontSize: 13,
-                fontWeight: 600,
+                fontWeight: 700,
                 transition: "all 0.2s",
                 background: vista === v ? "#3b82f6" : "transparent",
-                color: vista === v ? "#fff" : "#64748b"
+                color: vista === v ? "#fff" : "#94a3b8"
               }}
             >
               {v === "mes" ? "📅 Mensual" : "📊 Anual"}
@@ -686,23 +783,44 @@ export default function App() {
           ))}
         </div>
 
+        <div style={{ display: "flex", gap: 8, marginBottom: vista === "mes" ? 12 : 0 }}>
+          {Object.entries(BASE_PRESUPUESTOS).map(([key, { label, icon }]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                flex: 1,
+                padding: "10px 6px",
+                borderRadius: 12,
+                border: "1px solid #243042",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+                background: tab === key ? "#1d4ed8" : "#172033",
+                color: tab === key ? "#fff" : "#94a3b8"
+              }}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+
         {vista === "mes" && (
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
             {MESES.map((m, i) => (
               <button
                 key={i}
                 onClick={() => setMes(i)}
                 style={{
                   flexShrink: 0,
-                  padding: "5px 11px",
-                  borderRadius: 20,
+                  padding: "6px 12px",
+                  borderRadius: 999,
                   border: "none",
                   cursor: "pointer",
                   fontSize: 12,
-                  fontWeight: mes === i ? 700 : 400,
-                  transition: "all 0.2s",
-                  background: mes === i ? "#3b82f6" : "#1e293b",
-                  color: mes === i ? "#fff" : "#64748b"
+                  fontWeight: mes === i ? 700 : 500,
+                  background: mes === i ? "#3b82f6" : "#172033",
+                  color: mes === i ? "#fff" : "#94a3b8"
                 }}
               >
                 {m.slice(0, 3)}
@@ -719,8 +837,8 @@ export default function App() {
               background: "#451a03",
               color: "#fde68a",
               border: "1px solid #92400e",
-              borderRadius: 10,
-              padding: "10px 12px",
+              borderRadius: 12,
+              padding: "12px 14px",
               fontSize: 12
             }}
           >
@@ -738,56 +856,36 @@ export default function App() {
           }}
         >
           {[
-            { label: "Ingresos", val: vista === "mes" ? totales.ingresos : totalesAnuales.ingresos, color: "#22c55e" },
-            { label: "Gastos", val: vista === "mes" ? totales.gastos : totalesAnuales.gastos, color: "#f97316" },
+            { label: "Ingresos", val: vista === "mes" ? totales.ingresos : totalesAnuales.ingresos, color: "#22c55e", icon: "💰" },
+            { label: "Gastos", val: vista === "mes" ? totales.gastos : totalesAnuales.gastos, color: "#f97316", icon: "💸" },
             {
               label: "Disponible",
               val: vista === "mes" ? totales.disponible : totalesAnuales.disponible,
-              color: disponibleColor(vista === "mes" ? totales.disponible : totalesAnuales.disponible)
+              color: disponibleColor(vista === "mes" ? totales.disponible : totalesAnuales.disponible),
+              icon: "📊"
             }
-          ].map(({ label, val, color }) => (
+          ].map(({ label, val, color, icon }) => (
             <div
               key={label}
               style={{
-                background: "#1e293b",
-                borderRadius: 12,
-                padding: isDesktop ? "18px 16px" : "12px 10px",
+                background: "linear-gradient(180deg, #172033 0%, #111827 100%)",
+                borderRadius: 16,
+                padding: isDesktop ? "20px 16px" : "14px 10px",
                 textAlign: "center",
-                border: `1px solid ${color}22`
+                border: `1px solid ${color}22`,
+                boxShadow: "0 10px 24px rgba(0,0,0,0.18)"
               }}
             >
-              <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
+              <div style={{ fontSize: 18, marginBottom: 6 }}>{icon}</div>
+              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
                 {label}
               </div>
-              <div style={{ fontSize: isDesktop ? 18 : 15, fontWeight: 700, color }}>
+              <div style={{ fontSize: isDesktop ? 20 : 15, fontWeight: 900, color }}>
                 {Math.round(val)}€
               </div>
             </div>
           ))}
         </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, padding: isDesktop ? "18px 22px 0" : "14px 16px 0" }}>
-        {Object.entries(PRESUPUESTOS).map(([key, { label, icon }]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              flex: 1,
-              padding: "9px 4px",
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              transition: "all 0.2s",
-              background: tab === key ? "#1d4ed8" : "#1e293b",
-              color: tab === key ? "#fff" : "#64748b"
-            }}
-          >
-            {icon} {label}
-          </button>
-        ))}
       </div>
 
       {!puedeEditarTabActual && (
@@ -796,7 +894,7 @@ export default function App() {
             style={{
               background: "#3f3f46",
               color: "#e4e4e7",
-              borderRadius: 10,
+              borderRadius: 12,
               padding: "10px 12px",
               fontSize: 12
             }}
@@ -816,10 +914,10 @@ export default function App() {
               alignItems: "start"
             }}
           >
-            <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ padding: "12px 16px", background: "#172554", borderBottom: "1px solid #1e3a8a" }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>
-                  Resumen Anual {año} — {PRESUPUESTOS[tab].label}
+            <div style={{ background: "#172033", borderRadius: 18, overflow: "hidden", border: "1px solid #243042" }}>
+              <div style={{ padding: "14px 16px", background: "#172554", borderBottom: "1px solid #1e3a8a" }}>
+                <span style={{ fontWeight: 800, fontSize: 14 }}>
+                  Resumen Anual {año} — {BASE_PRESUPUESTOS[tab].label}
                 </span>
               </div>
 
@@ -838,40 +936,40 @@ export default function App() {
                       padding: "10px 16px",
                       borderBottom: "1px solid #0f172a",
                       cursor: "pointer",
-                      opacity: hasDatos ? 1 : 0.4,
+                      opacity: hasDatos ? 1 : 0.45,
                       background: mes === i ? "#1e3a5f22" : "transparent"
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 500, width: 80 }}>{m}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, width: 80 }}>{m}</span>
                     <span style={{ fontSize: 12, color: "#22c55e" }}>{t.ingresos > 0 ? fmtDisplay(t.ingresos) : "—"}</span>
                     <span style={{ fontSize: 12, color: "#f97316" }}>{t.gastos > 0 ? fmtDisplay(t.gastos) : "—"}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: disponibleColor(t.disponible) }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: disponibleColor(t.disponible) }}>
                       {hasDatos ? fmtDisplay(t.disponible) : "—"}
                     </span>
                   </div>
                 );
               })}
 
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", background: "#0f172a" }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>TOTAL</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e" }}>{fmtDisplay(totalesAnuales.ingresos)}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#f97316" }}>{fmtDisplay(totalesAnuales.gastos)}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: disponibleColor(totalesAnuales.disponible) }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#0f172a" }}>
+                <span style={{ fontSize: 13, fontWeight: 800 }}>TOTAL</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#22c55e" }}>{fmtDisplay(totalesAnuales.ingresos)}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#f97316" }}>{fmtDisplay(totalesAnuales.gastos)}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: disponibleColor(totalesAnuales.disponible) }}>
                   {fmtDisplay(totalesAnuales.disponible)}
                 </span>
               </div>
             </div>
 
             <div style={{ display: "grid", gap: 16 }}>
-              <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>
+              <div style={{ background: "#172033", borderRadius: 18, padding: "16px", border: "1px solid #243042" }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>
                   Distribución de gastos anuales
                 </div>
 
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isDesktop ? "1fr" : "1fr",
+                    gridTemplateColumns: "1fr",
                     gap: 10,
                     justifyItems: "center"
                   }}
@@ -908,7 +1006,7 @@ export default function App() {
                             </span>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtDisplay(item.total)}</div>
+                            <div style={{ fontSize: 13, fontWeight: 800 }}>{fmtDisplay(item.total)}</div>
                             <div style={{ fontSize: 11, color: "#94a3b8" }}>{fmtPct(pct)}</div>
                           </div>
                         </div>
@@ -925,9 +1023,9 @@ export default function App() {
                   gap: 12
                 }}
               >
-                <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                <div style={{ background: "#172033", borderRadius: 18, padding: "16px", border: "1px solid #243042" }}>
                   <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Mayor gasto</div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900 }}>
                     {principalGasto ? principalGasto.categoria : "—"}
                   </div>
                   <div style={{ fontSize: 14, color: "#f97316", marginTop: 6 }}>
@@ -935,12 +1033,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                <div style={{ background: "#172033", borderRadius: 18, padding: "16px", border: "1px solid #243042" }}>
                   <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>
                     {mesesConGasto <= 1 ? "Meses con gasto" : "Media meses con gasto"}
                   </div>
 
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900 }}>
                     {mesesConGasto <= 1 ? mesesConGasto : fmtDisplay(mediaMensualGasto)}
                   </div>
 
@@ -952,8 +1050,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
+              <div style={{ background: "#172033", borderRadius: 18, padding: "16px", border: "1px solid #243042" }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>
                   Ranking de gastos por categoría
                 </div>
 
@@ -974,10 +1072,10 @@ export default function App() {
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
                             {index + 1}. {item.categoria}
                           </div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800 }}>
                             {fmtDisplay(item.total)}
                           </div>
                         </div>
@@ -1018,6 +1116,26 @@ export default function App() {
 
       {vista === "mes" && (
         <div style={{ padding: isDesktop ? "20px 22px 0" : "16px 16px 0" }}>
+          {puedeEditarTabActual && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+              <button
+                onClick={() => setModalCategoriaAbierto(true)}
+                style={{
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "10px 14px",
+                  background: "#2563eb",
+                  color: "#fff",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 8px 24px rgba(37,99,235,0.25)"
+                }}
+              >
+                ➕ Añadir apartado
+              </button>
+            </div>
+          )}
+
           <Seccion
             titulo="💰 Ingresos"
             color="#22c55e"
@@ -1028,6 +1146,7 @@ export default function App() {
             onTap={abrirEdicion}
             total={totales.ingresos}
             editable={puedeEditarTabActual}
+            data={data}
           />
 
           <Seccion
@@ -1040,11 +1159,12 @@ export default function App() {
             onTap={abrirEdicion}
             total={totales.gastos}
             editable={puedeEditarTabActual}
+            data={data}
           />
 
           <div
             style={{
-              background: "#1e293b",
+              background: "#172033",
               border: "1px solid #243042",
               borderRadius: 18,
               padding: "16px",
@@ -1054,7 +1174,7 @@ export default function App() {
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 18 }}>📝</span>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>Notas del mes</div>
+              <div style={{ fontSize: 15, fontWeight: 900 }}>Notas del mes</div>
             </div>
 
             <textarea
@@ -1066,7 +1186,7 @@ export default function App() {
               readOnly={!puedeEditarTabActual}
               placeholder={
                 puedeEditarTabActual
-                  ? "Ej: Adeslas descontado en nómina. Se ha revisado hasta el día X."
+                  ? "Ej: Adeslas descontado en nómina: 62,40 €. No sumarlo como gasto aparte."
                   : "Sin notas"
               }
               style={{
@@ -1136,6 +1256,150 @@ export default function App() {
         </div>
       )}
 
+      {modalCategoriaAbierto && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000000cc",
+            zIndex: 120,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setModalCategoriaAbierto(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 460,
+              background: "#1e293b",
+              borderRadius: 20,
+              padding: "22px 18px",
+              border: "1px solid #334155"
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
+              Añadir apartado
+            </div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>
+              Se guardará para {BASE_PRESUPUESTOS[tab].label} y estará disponible en todos los meses.
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Sección</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button
+                  onClick={() => setSeccionNuevaCategoria("gastos")}
+                  style={{
+                    padding: "12px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: seccionNuevaCategoria === "gastos" ? "#f97316" : "#334155",
+                    color: "#fff",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  💸 Gasto
+                </button>
+                <button
+                  onClick={() => setSeccionNuevaCategoria("ingresos")}
+                  style={{
+                    padding: "12px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: seccionNuevaCategoria === "ingresos" ? "#22c55e" : "#334155",
+                    color: "#fff",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  💰 Ingreso
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Nombre</div>
+              <input
+                value={nombreNuevaCategoria}
+                onChange={(e) => setNombreNuevaCategoria(e.target.value)}
+                placeholder="Ej. Gym, Dentista, Mascota..."
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #475569",
+                  background: "#0f172a",
+                  color: "#fff",
+                  boxSizing: "border-box",
+                  outline: "none"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Emoji</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {EMOJIS_SUGERIDOS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => setEmojiNuevaCategoria(emoji)}
+                    style={{
+                      flexShrink: 0,
+                      width: 42,
+                      height: 42,
+                      borderRadius: 12,
+                      border: emojiNuevaCategoria === emoji ? "2px solid #3b82f6" : "1px solid #334155",
+                      background: "#111827",
+                      color: "#fff",
+                      cursor: "pointer",
+                      fontSize: 20
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button
+                onClick={() => setModalCategoriaAbierto(false)}
+                style={{
+                  padding: "13px",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#334155",
+                  color: "#cbd5e1",
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={agregarCategoriaPersonalizada}
+                style={{
+                  padding: "13px",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#2563eb",
+                  color: "#fff",
+                  fontWeight: 800,
+                  cursor: "pointer"
+                }}
+              >
+                Guardar apartado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalAbierto && editando && (
         <div
           style={{
@@ -1168,8 +1432,8 @@ export default function App() {
               {editando.seccion === "ingresos" ? "Ingreso" : "Gasto"} · {MESES[mes]} {año}
             </div>
 
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>
-              {editando.cat}
+            <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
+              {getEmojiCategoria(data, editando.tipo, editando.seccion, editando.cat)} {editando.cat}
             </div>
 
             <div style={{ fontSize: 14, color: "#93c5fd", marginBottom: 20 }}>
@@ -1188,7 +1452,7 @@ export default function App() {
                     background: "#334155",
                     color: "#fff",
                     fontSize: 14,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: "pointer"
                   }}
                 >
@@ -1203,7 +1467,7 @@ export default function App() {
 
             {usandoMovimientos ? (
               <>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>
                   Añadir movimiento
                 </div>
 
@@ -1223,7 +1487,7 @@ export default function App() {
                       border: "none",
                       background: tipoMovimiento === "gasto" ? "#3b82f6" : "#334155",
                       color: "#fff",
-                      fontWeight: 600,
+                      fontWeight: 700,
                       cursor: "pointer"
                     }}
                   >
@@ -1238,7 +1502,7 @@ export default function App() {
                       border: "none",
                       background: tipoMovimiento === "abono" ? "#22c55e" : "#334155",
                       color: "#fff",
-                      fontWeight: 600,
+                      fontWeight: 700,
                       cursor: "pointer"
                     }}
                   >
@@ -1257,7 +1521,7 @@ export default function App() {
                       width: "100%",
                       padding: "14px 50px 14px 14px",
                       fontSize: 18,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       background: "#0f172a",
                       border: "2px solid #3b82f6",
                       borderRadius: 12,
@@ -1312,7 +1576,7 @@ export default function App() {
                     background: tipoMovimiento === "abono" ? "#22c55e" : "#3b82f6",
                     color: "#fff",
                     fontSize: 15,
-                    fontWeight: 600,
+                    fontWeight: 800,
                     cursor: "pointer",
                     marginBottom: 20
                   }}
@@ -1320,7 +1584,7 @@ export default function App() {
                   {tipoMovimiento === "abono" ? "Añadir abono" : "Añadir gasto"}
                 </button>
 
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>
                   Historial
                 </div>
 
@@ -1343,7 +1607,7 @@ export default function App() {
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: normalizarNumero(mov.importe) >= 0 ? "#22c55e" : "#f87171" }}>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: normalizarNumero(mov.importe) >= 0 ? "#22c55e" : "#f87171" }}>
                               {fmtDisplay(normalizarNumero(mov.importe))}
                             </div>
                             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
@@ -1385,7 +1649,7 @@ export default function App() {
                       width: "100%",
                       padding: "16px 50px 16px 16px",
                       fontSize: 20,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       background: "#0f172a",
                       border: "2px solid #3b82f6",
                       borderRadius: 12,
@@ -1407,7 +1671,7 @@ export default function App() {
                       background: "#334155",
                       color: "#94a3b8",
                       fontSize: 15,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       cursor: "pointer"
                     }}
                   >
@@ -1422,7 +1686,7 @@ export default function App() {
                       background: "#3b82f6",
                       color: "#fff",
                       fontSize: 15,
-                      fontWeight: 600,
+                      fontWeight: 800,
                       cursor: "pointer"
                     }}
                   >
@@ -1438,13 +1702,13 @@ export default function App() {
   );
 }
 
-function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, editable }) {
+function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, editable, data }) {
   const [abierta, setAbierta] = useState(true);
 
   return (
     <div
       style={{
-        background: "linear-gradient(180deg, #1e293b 0%, #172033 100%)",
+        background: "linear-gradient(180deg, #172033 0%, #111827 100%)",
         borderRadius: 18,
         marginBottom: 16,
         overflow: "hidden",
@@ -1463,13 +1727,13 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
           borderBottom: abierta ? "1px solid #243042" : "none"
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: 15 }}>{titulo}</span>
+        <span style={{ fontWeight: 900, fontSize: 15 }}>{titulo}</span>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span
             style={{
               fontSize: 14,
-              fontWeight: 800,
+              fontWeight: 900,
               color,
               background: `${color}18`,
               border: `1px solid ${color}30`,
@@ -1510,8 +1774,8 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
+                      width: 38,
+                      height: 38,
                       borderRadius: 12,
                       display: "grid",
                       placeItems: "center",
@@ -1520,14 +1784,14 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                       flexShrink: 0
                     }}
                   >
-                    <span style={{ fontSize: 16 }}>{iconoCategoria(cat)}</span>
+                    <span style={{ fontSize: 18 }}>{getEmojiCategoria(data, tipo, seccion, cat)}</span>
                   </div>
 
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
                         fontSize: 14,
-                        fontWeight: tieneValor ? 700 : 500,
+                        fontWeight: tieneValor ? 800 : 600,
                         color: tieneValor ? "#f8fafc" : "#94a3b8",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
@@ -1546,7 +1810,7 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                   <span
                     style={{
                       fontSize: 14,
-                      fontWeight: 800,
+                      fontWeight: 900,
                       color: tieneValor ? color : "#475569"
                     }}
                   >
@@ -1566,11 +1830,12 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
 }
 
 const btnSmall = {
-  padding: "5px 10px",
-  borderRadius: 8,
+  padding: "7px 12px",
+  borderRadius: 10,
   border: "1px solid #334155",
-  background: "#1e293b",
-  color: "#94a3b8",
+  background: "#172033",
+  color: "#cbd5e1",
   fontSize: 12,
+  fontWeight: 700,
   cursor: "pointer"
 };
