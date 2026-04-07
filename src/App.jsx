@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";
+import { cargarPresupuesto, guardarPresupuesto } from "./presupuestoDb";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const AÑO_ACTUAL = new Date().getFullYear();
 const MES_ACTUAL = new Date().getMonth();
 
-// Estructura de categorías basada en el Excel
 const CATEGORIAS_FAMILIAR = {
   ingresos: ["Adri","Gisela","Otros ingresos"],
   gastos: ["Vivienda","Agua","Luz","Supermercado","Seguros (hogar, vida)","Teléfono (fibra + móvil)","Alarma","Restaurante","Ropa","Basuras","IBI","Otros"]
@@ -31,11 +33,26 @@ function getInitialData() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return JSON.parse(saved);
   } catch(e){}
-  // Datos iniciales del Excel (2025 - familiar como ejemplo)
   return {
     2025: {
       familiar: {
-        0: { ingresos: { "Adri": 650, "Gisela": 500, "Otros ingresos": 0 }, gastos: { "Vivienda": 548.55, "Agua": 0, "Luz": 55.65, "Supermercado": 223.39, "Seguros (hogar, vida)": 68.68, "Teléfono (fibra + móvil)": 24.19, "Alarma": 0, "Restaurante": 0, "Ropa": 26, "Basuras": 0, "IBI": 0, "Otros": 0 } },
+        0: {
+          ingresos: { "Adri": 650, "Gisela": 500, "Otros ingresos": 0 },
+          gastos: {
+            "Vivienda": 548.55,
+            "Agua": 0,
+            "Luz": 55.65,
+            "Supermercado": 223.39,
+            "Seguros (hogar, vida)": 68.68,
+            "Teléfono (fibra + móvil)": 24.19,
+            "Alarma": 0,
+            "Restaurante": 0,
+            "Ropa": 26,
+            "Basuras": 0,
+            "IBI": 0,
+            "Otros": 0
+          }
+        },
       },
       adri: {},
       gisela: {}
@@ -52,18 +69,13 @@ function calcTotales(data, tipo, año, mes) {
 }
 
 function calcAnual(data, tipo, año) {
-  const cats = PRESUPUESTOS[tipo].cats;
   let ing = 0, gas = 0;
   for (let m = 0; m < 12; m++) {
     const t = calcTotales(data, tipo, año, m);
-    ing += t.ingresos; gas += t.gastos;
+    ing += t.ingresos;
+    gas += t.gastos;
   }
   return { ingresos: ing, gastos: gas, disponible: ing - gas };
-}
-
-function fmt(n) {
-  if (n === 0 || n === "" || n === undefined || n === null) return "";
-  return parseFloat(n).toFixed(2).replace(".", ",");
 }
 
 function fmtDisplay(n) {
@@ -71,18 +83,56 @@ function fmtDisplay(n) {
 }
 
 export default function App() {
-  const [data, setData] = useState(getInitialData);
+  const [data, setData] = useState(null);
+  const [user, setUser] = useState(null);
   const [año, setAño] = useState(AÑO_ACTUAL);
   const [mes, setMes] = useState(MES_ACTUAL);
   const [tab, setTab] = useState("familiar");
-  const [vista, setVista] = useState("mes"); // mes | anual
-  const [editando, setEditando] = useState(null); // {tipo, cat, seccion, valor}
+  const [vista, setVista] = useState("mes");
+  const [editando, setEditando] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [inputVal, setInputVal] = useState("");
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e){}
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+
+      if (!firebaseUser) {
+        setData(null);
+        return;
+      }
+
+      try {
+        const remoto = await cargarPresupuesto(firebaseUser.uid);
+        const inicial = remoto || getInitialData();
+        setData(inicial);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(inicial));
+      } catch (e) {
+        const local = getInitialData();
+        setData(local);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!data) return;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {}
   }, [data]);
+
+  useEffect(() => {
+    if (!user || !data) return;
+
+    const timer = setTimeout(() => {
+      guardarPresupuesto(user.uid, data).catch(console.error);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [user, data]);
 
   function getValor(tipo, seccion, cat) {
     return data?.[año]?.[tipo]?.[mes]?.[seccion]?.[cat] || "";
@@ -115,10 +165,23 @@ export default function App() {
     setInputVal("");
   }
 
+  if (!data) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "#f1f5f9",
+        display: "grid",
+        placeItems: "center"
+      }}>
+        Cargando presupuesto...
+      </div>
+    );
+  }
+
   const totales = calcTotales(data, tab, año, mes);
   const totalesAnuales = calcAnual(data, tab, año);
   const cats = PRESUPUESTOS[tab].cats;
-
   const disponibleColor = (n) => n >= 0 ? "#22c55e" : "#ef4444";
 
   return (
@@ -127,8 +190,6 @@ export default function App() {
       fontFamily: "'DM Sans', 'Segoe UI', sans-serif", maxWidth: 480, margin: "0 auto",
       paddingBottom: 90
     }}>
-
-      {/* HEADER */}
       <div style={{
         background: "linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)",
         padding: "20px 20px 16px", borderBottom: "1px solid #1e293b"
@@ -144,7 +205,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Selector de vista */}
         <div style={{ display: "flex", background: "#1e293b", borderRadius: 10, padding: 3, marginBottom: 14 }}>
           {["mes","anual"].map(v => (
             <button key={v} onClick={() => setVista(v)} style={{
@@ -156,7 +216,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Selector de mes */}
         {vista === "mes" && (
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
             {MESES.map((m, i) => (
@@ -171,14 +230,12 @@ export default function App() {
         )}
       </div>
 
-      {/* RESUMEN RÁPIDO */}
       <div style={{ padding: "14px 16px 0" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {[
             { label: "Ingresos", val: vista === "mes" ? totales.ingresos : totalesAnuales.ingresos, color: "#22c55e" },
             { label: "Gastos", val: vista === "mes" ? totales.gastos : totalesAnuales.gastos, color: "#f97316" },
-            { label: "Disponible", val: vista === "mes" ? totales.disponible : totalesAnuales.disponible,
-              color: disponibleColor(vista === "mes" ? totales.disponible : totalesAnuales.disponible) }
+            { label: "Disponible", val: vista === "mes" ? totales.disponible : totalesAnuales.disponible, color: disponibleColor(vista === "mes" ? totales.disponible : totalesAnuales.disponible) }
           ].map(({ label, val, color }) => (
             <div key={label} style={{
               background: "#1e293b", borderRadius: 12, padding: "12px 10px", textAlign: "center",
@@ -191,7 +248,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* TABS presupuesto */}
       <div style={{ display: "flex", gap: 8, padding: "14px 16px 0" }}>
         {Object.entries(PRESUPUESTOS).map(([key, { label, icon }]) => (
           <button key={key} onClick={() => setTab(key)} style={{
@@ -203,7 +259,6 @@ export default function App() {
         ))}
       </div>
 
-      {/* VISTA ANUAL */}
       {vista === "anual" && (
         <div style={{ padding: "16px 16px 0" }}>
           <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden" }}>
@@ -239,11 +294,8 @@ export default function App() {
         </div>
       )}
 
-      {/* VISTA MENSUAL */}
       {vista === "mes" && (
         <div style={{ padding: "16px 16px 0" }}>
-
-          {/* INGRESOS */}
           <Seccion
             titulo="💰 Ingresos"
             color="#22c55e"
@@ -255,7 +307,6 @@ export default function App() {
             total={totales.ingresos}
           />
 
-          {/* GASTOS */}
           <Seccion
             titulo="💸 Gastos"
             color="#f97316"
@@ -267,7 +318,6 @@ export default function App() {
             total={totales.gastos}
           />
 
-          {/* DINERO DISPONIBLE */}
           <div style={{
             background: totales.disponible >= 0 ? "#052e16" : "#450a0a",
             border: `1px solid ${totales.disponible >= 0 ? "#22c55e" : "#ef4444"}44`,
@@ -287,7 +337,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDICIÓN */}
       {modalAbierto && editando && (
         <div style={{
           position: "fixed", inset: 0, background: "#000000cc", zIndex: 100,
@@ -338,6 +387,7 @@ export default function App() {
 
 function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total }) {
   const [abierta, setAbierta] = useState(true);
+
   return (
     <div style={{ background: "#1e293b", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
       <div
@@ -354,9 +404,11 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total })
           <span style={{ color: "#64748b", fontSize: 12 }}>{abierta ? "▲" : "▼"}</span>
         </div>
       </div>
+
       {abierta && cats.map(cat => {
         const val = getValor(tipo, seccion, cat);
         const tieneValor = val !== "" && val !== 0;
+
         return (
           <div
             key={cat}
@@ -386,6 +438,11 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total })
 }
 
 const btnSmall = {
-  padding: "5px 10px", borderRadius: 8, border: "1px solid #334155",
-  background: "#1e293b", color: "#94a3b8", fontSize: 12, cursor: "pointer"
+  padding: "5px 10px",
+  borderRadius: 8,
+  border: "1px solid #334155",
+  background: "#1e293b",
+  color: "#94a3b8",
+  fontSize: 12,
+  cursor: "pointer"
 };
