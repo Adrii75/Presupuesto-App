@@ -335,6 +335,7 @@ export default function App() {
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 900 : false
   );
+  const [notaMesInput, setNotaMesInput] = useState("");
 
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
@@ -397,14 +398,32 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [data, user]);
 
+  useEffect(() => {
+    if (!data) return;
+    const nota = data?.[año]?.[tab]?.[mes]?.notasMes || "";
+    setNotaMesInput(nota);
+  }, [data, año, mes, tab]);
+
   function asegurarRuta(next, tipo, seccion, cat) {
     if (!next[año]) next[año] = {};
     if (!next[año][tipo]) next[año][tipo] = {};
-    if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {} };
+    if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {}, notasMes: "" };
+    if (!next[año][tipo][mes].ingresos) next[año][tipo][mes].ingresos = {};
+    if (!next[año][tipo][mes].gastos) next[año][tipo][mes].gastos = {};
+    if (next[año][tipo][mes].notasMes === undefined) next[año][tipo][mes].notasMes = "";
     if (!next[año][tipo][mes][seccion]) next[año][tipo][mes][seccion] = {};
     if (next[año][tipo][mes][seccion][cat] === undefined) {
       next[año][tipo][mes][seccion][cat] = "";
     }
+  }
+
+  function asegurarRutaMes(next, tipo) {
+    if (!next[año]) next[año] = {};
+    if (!next[año][tipo]) next[año][tipo] = {};
+    if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {}, notasMes: "" };
+    if (!next[año][tipo][mes].ingresos) next[año][tipo][mes].ingresos = {};
+    if (!next[año][tipo][mes].gastos) next[año][tipo][mes].gastos = {};
+    if (next[año][tipo][mes].notasMes === undefined) next[año][tipo][mes].notasMes = "";
   }
 
   function getRawValor(tipo, seccion, cat) {
@@ -426,6 +445,19 @@ export default function App() {
       next[año][tipo][mes][seccion][cat] = valor === "" ? "" : normalizarNumero(valor);
       return next;
     });
+  }
+
+  function setNotaMes(tipo, texto) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarRutaMes(next, tipo);
+      next[año][tipo][mes].notasMes = texto;
+      return next;
+    });
+  }
+
+  function getNotaMes(tipo) {
+    return data?.[año]?.[tipo]?.[mes]?.notasMes || "";
   }
 
   function convertirAMovimientosSiHaceFalta(tipo, seccion, cat) {
@@ -622,7 +654,7 @@ export default function App() {
               Presupuesto
             </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "#f8fafc" }}>
-              Familia García Mateo {año}
+              Familiar {año}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -1009,6 +1041,54 @@ export default function App() {
             total={totales.gastos}
             editable={puedeEditarTabActual}
           />
+
+          <div
+            style={{
+              background: "#1e293b",
+              border: "1px solid #243042",
+              borderRadius: 18,
+              padding: "16px",
+              marginBottom: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 18 }}>📝</span>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Notas del mes</div>
+            </div>
+
+            <textarea
+              value={notaMesInput}
+              onChange={(e) => {
+                setNotaMesInput(e.target.value);
+                if (puedeEditarTabActual) setNotaMes(tab, e.target.value);
+              }}
+              readOnly={!puedeEditarTabActual}
+              placeholder={
+                puedeEditarTabActual
+                  ? "Ej: Adeslas descontado en nómina: 62,40 €. No sumarlo como gasto aparte."
+                  : "Sin notas"
+              }
+              style={{
+                width: "100%",
+                minHeight: 110,
+                resize: "vertical",
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "1px solid #334155",
+                background: puedeEditarTabActual ? "#0f172a" : "#111827",
+                color: "#f8fafc",
+                boxSizing: "border-box",
+                outline: "none",
+                fontSize: 14,
+                lineHeight: 1.45
+              }}
+            />
+
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+              Estas notas son informativas y no alteran ingresos ni gastos.
+            </div>
+          </div>
 
           <div
             style={{
