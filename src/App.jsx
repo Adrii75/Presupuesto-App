@@ -16,7 +16,11 @@ function puedeEditarTipo(email, tipo) {
   return false;
 }
 
-const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MESES = [
+  "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+];
+
 const AÑO_ACTUAL = new Date().getFullYear();
 const MES_ACTUAL = new Date().getMonth();
 
@@ -24,10 +28,12 @@ const CATEGORIAS_FAMILIAR = {
   ingresos: ["Adri","Gisela","Otros ingresos"],
   gastos: ["Vivienda","Agua","Luz","Supermercado","Seguros (hogar, vida)","Teléfono (fibra + móvil)","Alarma","Restaurante","Ropa","Basuras","IBI","Otros"]
 };
+
 const CATEGORIAS_ADRI = {
   ingresos: ["Adri","Otros ingresos"],
   gastos: ["Vivienda","Coche seguro","Gasolina coche","Seguro salud Adeslas","PS5","Netflix","Ocio","Spotify","Ahorro mensual","Inversión","Otros"]
 };
+
 const CATEGORIAS_GISELA = {
   ingresos: ["Gisela","Otros ingresos"],
   gastos: ["Vivienda","Coche seguro","Préstamo","Gasolina coche","Seguro salud Adeslas","Amazon","Spotify","iPad","Otros"]
@@ -40,6 +46,21 @@ const PRESUPUESTOS = {
 };
 
 const STORAGE_KEY = "presupuesto_familiar_v1";
+
+const CHART_COLORS = [
+  "#3b82f6",
+  "#22c55e",
+  "#f97316",
+  "#a855f7",
+  "#eab308",
+  "#06b6d4",
+  "#ef4444",
+  "#14b8a6",
+  "#8b5cf6",
+  "#84cc16",
+  "#f43f5e",
+  "#64748b"
+];
 
 function getInitialData() {
   try {
@@ -106,17 +127,51 @@ function calcTotales(data, tipo, año, mes) {
 }
 
 function calcAnual(data, tipo, año) {
-  let ing = 0, gas = 0;
+  let ing = 0;
+  let gas = 0;
+
   for (let m = 0; m < 12; m++) {
     const t = calcTotales(data, tipo, año, m);
     ing += t.ingresos;
     gas += t.gastos;
   }
+
   return { ingresos: ing, gastos: gas, disponible: ing - gas };
+}
+
+function calcCategoriaAnual(data, tipo, año, seccion) {
+  const categorias = PRESUPUESTOS[tipo].cats[seccion];
+  const resultado = categorias.map((cat) => {
+    let total = 0;
+    for (let m = 0; m < 12; m++) {
+      const valor = data?.[año]?.[tipo]?.[m]?.[seccion]?.[cat];
+      total += calcularValorCategoria(valor);
+    }
+    return { categoria: cat, total };
+  });
+
+  return resultado.sort((a, b) => b.total - a.total);
+}
+
+function resumirTopCategorias(items, topN = 5) {
+  const positivas = items.filter((x) => x.total > 0);
+  const top = positivas.slice(0, topN);
+  const resto = positivas.slice(topN);
+  const totalResto = resto.reduce((acc, x) => acc + x.total, 0);
+
+  if (totalResto > 0) {
+    top.push({ categoria: "Otros", total: totalResto });
+  }
+
+  return top;
 }
 
 function fmtDisplay(n) {
   return (Number(n) || 0).toFixed(2).replace(".", ",") + " €";
+}
+
+function fmtPct(n) {
+  return `${(Number(n) || 0).toFixed(1).replace(".", ",")}%`;
 }
 
 function hoyISO() {
@@ -128,6 +183,105 @@ function formatearFecha(fecha) {
   const partes = fecha.split("-");
   if (partes.length !== 3) return fecha;
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function polarToCartesian(cx, cy, r, angleInDegrees) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  return {
+    x: cx + (r * Math.cos(angleInRadians)),
+    y: cy + (r * Math.sin(angleInRadians))
+  };
+}
+
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+  return [
+    "M", start.x, start.y,
+    "A", r, r, 0, largeArcFlag, 0, end.x, end.y
+  ].join(" ");
+}
+
+function DonutChart({ items, total, size = 220, strokeWidth = 28 }) {
+  if (!items.length || total <= 0) {
+    return (
+      <div
+        style={{
+          height: size,
+          display: "grid",
+          placeItems: "center",
+          color: "#94a3b8",
+          fontSize: 14
+        }}
+      >
+        Sin datos suficientes
+      </div>
+    );
+  }
+
+  const radius = (size - strokeWidth) / 2;
+  const center = size / 2;
+  let currentAngle = 0;
+
+  return (
+    <div style={{ display: "grid", placeItems: "center" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke="#1e293b"
+          strokeWidth={strokeWidth}
+        />
+
+        {items.map((item, index) => {
+          const angle = (item.total / total) * 360;
+          const startAngle = currentAngle;
+          const endAngle = currentAngle + angle;
+          currentAngle += angle;
+
+          if (angle <= 0) return null;
+
+          return (
+            <path
+              key={item.categoria}
+              d={describeArc(center, center, radius, startAngle, endAngle)}
+              fill="none"
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              strokeWidth={strokeWidth}
+              strokeLinecap="butt"
+            />
+          );
+        })}
+
+        <circle cx={center} cy={center} r={radius - strokeWidth / 2} fill="#0f172a" />
+
+        <text
+          x="50%"
+          y="47%"
+          textAnchor="middle"
+          fill="#94a3b8"
+          fontSize="12"
+          fontWeight="600"
+        >
+          Total gasto
+        </text>
+        <text
+          x="50%"
+          y="57%"
+          textAnchor="middle"
+          fill="#f8fafc"
+          fontSize="16"
+          fontWeight="700"
+        >
+          {Math.round(total)}€
+        </text>
+      </svg>
+    </div>
+  );
 }
 
 export default function App() {
@@ -143,9 +297,22 @@ export default function App() {
   const [movFecha, setMovFecha] = useState(hoyISO());
   const [movNota, setMovNota] = useState("");
   const [errorCarga, setErrorCarga] = useState("");
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== "undefined" ? window.innerWidth >= 900 : false
+  );
 
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
+
+  useEffect(() => {
+    function handleResize() {
+      setIsDesktop(window.innerWidth >= 900);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -366,15 +533,21 @@ export default function App() {
   const totalesAnuales = calcAnual(data, tab, año);
   const cats = PRESUPUESTOS[tab].cats;
   const disponibleColor = (n) => n >= 0 ? "#22c55e" : "#ef4444";
+
   const movimientosActuales = editando ? getMovimientos(editando.tipo, editando.seccion, editando.cat) : [];
-  const usandoMovimientos = editando
-    ? (
-        getRawValor(editando.tipo, editando.seccion, editando.cat) &&
-        typeof getRawValor(editando.tipo, editando.seccion, editando.cat) === "object" &&
-        !Array.isArray(getRawValor(editando.tipo, editando.seccion, editando.cat)) &&
-        Array.isArray(getRawValor(editando.tipo, editando.seccion, editando.cat).movimientos)
-      )
-    : false;
+  const rawEditado = editando ? getRawValor(editando.tipo, editando.seccion, editando.cat) : null;
+  const usandoMovimientos = !!(
+    rawEditado &&
+    typeof rawEditado === "object" &&
+    !Array.isArray(rawEditado) &&
+    Array.isArray(rawEditado.movimientos)
+  );
+
+  const categoriasGastoAnual = calcCategoriaAnual(data, tab, año, "gastos");
+  const totalGastoAnual = categoriasGastoAnual.reduce((acc, item) => acc + item.total, 0);
+  const categoriasGrafica = resumirTopCategorias(categoriasGastoAnual, 5);
+  const principalGasto = categoriasGastoAnual.find((x) => x.total > 0);
+  const mediaMensualGasto = totalGastoAnual / 12;
 
   return (
     <div
@@ -383,7 +556,7 @@ export default function App() {
         background: "#0f172a",
         color: "#f1f5f9",
         fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-        maxWidth: 480,
+        maxWidth: isDesktop ? 1180 : 480,
         margin: "0 auto",
         paddingBottom: 90
       }}
@@ -391,7 +564,7 @@ export default function App() {
       <div
         style={{
           background: "linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)",
-          padding: "20px 20px 16px",
+          padding: isDesktop ? "28px 28px 18px" : "20px 20px 16px",
           borderBottom: "1px solid #1e293b"
         }}
       >
@@ -476,8 +649,14 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ padding: "14px 16px 0" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ padding: isDesktop ? "18px 22px 0" : "14px 16px 0" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "1fr 1fr 1fr",
+            gap: 10
+          }}
+        >
           {[
             { label: "Ingresos", val: vista === "mes" ? totales.ingresos : totalesAnuales.ingresos, color: "#22c55e" },
             { label: "Gastos", val: vista === "mes" ? totales.gastos : totalesAnuales.gastos, color: "#f97316" },
@@ -492,7 +671,7 @@ export default function App() {
               style={{
                 background: "#1e293b",
                 borderRadius: 12,
-                padding: "12px 10px",
+                padding: isDesktop ? "18px 16px" : "12px 10px",
                 textAlign: "center",
                 border: `1px solid ${color}22`
               }}
@@ -500,7 +679,7 @@ export default function App() {
               <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
                 {label}
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color }}>
+              <div style={{ fontSize: isDesktop ? 18 : 15, fontWeight: 700, color }}>
                 {Math.round(val)}€
               </div>
             </div>
@@ -508,7 +687,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, padding: "14px 16px 0" }}>
+      <div style={{ display: "flex", gap: 8, padding: isDesktop ? "18px 22px 0" : "14px 16px 0" }}>
         {Object.entries(PRESUPUESTOS).map(([key, { label, icon }]) => (
           <button
             key={key}
@@ -532,7 +711,7 @@ export default function App() {
       </div>
 
       {!puedeEditarTabActual && (
-        <div style={{ padding: "10px 16px 0" }}>
+        <div style={{ padding: isDesktop ? "10px 22px 0" : "10px 16px 0" }}>
           <div
             style={{
               background: "#3f3f46",
@@ -548,56 +727,211 @@ export default function App() {
       )}
 
       {vista === "anual" && (
-        <div style={{ padding: "16px 16px 0" }}>
-          <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", background: "#172554", borderBottom: "1px solid #1e3a8a" }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>
-                Resumen Anual {año} — {PRESUPUESTOS[tab].label}
-              </span>
+        <div style={{ padding: isDesktop ? "20px 22px 0" : "16px 16px 0" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isDesktop ? "1.1fr 0.9fr" : "1fr",
+              gap: 16,
+              alignItems: "start"
+            }}
+          >
+            <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", background: "#172554", borderBottom: "1px solid #1e3a8a" }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>
+                  Resumen Anual {año} — {PRESUPUESTOS[tab].label}
+                </span>
+              </div>
+
+              {MESES.map((m, i) => {
+                const t = calcTotales(data, tab, año, i);
+                const hasDatos = t.ingresos > 0 || t.gastos > 0;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => { setMes(i); setVista("mes"); }}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "10px 16px",
+                      borderBottom: "1px solid #0f172a",
+                      cursor: "pointer",
+                      opacity: hasDatos ? 1 : 0.4,
+                      background: mes === i ? "#1e3a5f22" : "transparent"
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 500, width: 80 }}>{m}</span>
+                    <span style={{ fontSize: 12, color: "#22c55e" }}>{t.ingresos > 0 ? fmtDisplay(t.ingresos) : "—"}</span>
+                    <span style={{ fontSize: 12, color: "#f97316" }}>{t.gastos > 0 ? fmtDisplay(t.gastos) : "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: disponibleColor(t.disponible) }}>
+                      {hasDatos ? fmtDisplay(t.disponible) : "—"}
+                    </span>
+                  </div>
+                );
+              })}
+
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", background: "#0f172a" }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>TOTAL</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e" }}>{fmtDisplay(totalesAnuales.ingresos)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#f97316" }}>{fmtDisplay(totalesAnuales.gastos)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: disponibleColor(totalesAnuales.disponible) }}>
+                  {fmtDisplay(totalesAnuales.disponible)}
+                </span>
+              </div>
             </div>
 
-            {MESES.map((m, i) => {
-              const t = calcTotales(data, tab, año, i);
-              const hasDatos = t.ingresos > 0 || t.gastos > 0;
-              return (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>
+                  Distribución de gastos anuales
+                </div>
+
                 <div
-                  key={i}
-                  onClick={() => { setMes(i); setVista("mes"); }}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "10px 16px",
-                    borderBottom: "1px solid #0f172a",
-                    cursor: "pointer",
-                    opacity: hasDatos ? 1 : 0.4,
-                    background: mes === i ? "#1e3a5f22" : "transparent"
+                    display: "grid",
+                    gridTemplateColumns: isDesktop ? "1fr" : "1fr",
+                    gap: 10,
+                    justifyItems: "center"
                   }}
                 >
-                  <span style={{ fontSize: 13, fontWeight: 500, width: 80 }}>{m}</span>
-                  <span style={{ fontSize: 12, color: "#22c55e" }}>{t.ingresos > 0 ? fmtDisplay(t.ingresos) : "—"}</span>
-                  <span style={{ fontSize: 12, color: "#f97316" }}>{t.gastos > 0 ? fmtDisplay(t.gastos) : "—"}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: disponibleColor(t.disponible) }}>
-                    {hasDatos ? fmtDisplay(t.disponible) : "—"}
-                  </span>
-                </div>
-              );
-            })}
+                  <DonutChart items={categoriasGrafica} total={totalGastoAnual} />
 
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", background: "#0f172a" }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>TOTAL</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e" }}>{fmtDisplay(totalesAnuales.ingresos)}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#f97316" }}>{fmtDisplay(totalesAnuales.gastos)}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: disponibleColor(totalesAnuales.disponible) }}>
-                {fmtDisplay(totalesAnuales.disponible)}
-              </span>
+                  <div style={{ width: "100%", marginTop: 6 }}>
+                    {categoriasGrafica.map((item, index) => {
+                      const pct = totalGastoAnual > 0 ? (item.total / totalGastoAnual) * 100 : 0;
+                      return (
+                        <div
+                          key={item.categoria}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            padding: "8px 0",
+                            borderBottom: "1px solid #0f172a"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 999,
+                                background: CHART_COLORS[index % CHART_COLORS.length],
+                                flexShrink: 0
+                              }}
+                            />
+                            <span style={{ fontSize: 13, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {item.categoria}
+                            </span>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtDisplay(item.total)}</div>
+                            <div style={{ fontSize: 11, color: "#94a3b8" }}>{fmtPct(pct)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr",
+                  gap: 12
+                }}
+              >
+                <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Mayor gasto</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                    {principalGasto ? principalGasto.categoria : "—"}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#f97316", marginTop: 6 }}>
+                    {principalGasto ? fmtDisplay(principalGasto.total) : "—"}
+                  </div>
+                </div>
+
+                <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Media mensual gasto</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                    {fmtDisplay(mediaMensualGasto)}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+                    Promedio del año seleccionado
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: "#1e293b", borderRadius: 14, padding: "16px" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
+                  Ranking de gastos por categoría
+                </div>
+
+                {categoriasGastoAnual.filter((x) => x.total > 0).length === 0 ? (
+                  <div style={{ color: "#94a3b8", fontSize: 13 }}>
+                    Todavía no hay gastos suficientes para mostrar el ranking.
+                  </div>
+                ) : (
+                  categoriasGastoAnual.filter((x) => x.total > 0).map((item, index) => {
+                    const pct = totalGastoAnual > 0 ? (item.total / totalGastoAnual) * 100 : 0;
+
+                    return (
+                      <div
+                        key={item.categoria}
+                        style={{
+                          padding: "10px 0",
+                          borderBottom: "1px solid #0f172a"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>
+                            {index + 1}. {item.categoria}
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>
+                            {fmtDisplay(item.total)}
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 7 }}>
+                          <div
+                            style={{
+                              width: "100%",
+                              height: 8,
+                              background: "#0f172a",
+                              borderRadius: 999,
+                              overflow: "hidden"
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${pct}%`,
+                                height: "100%",
+                                background: CHART_COLORS[index % CHART_COLORS.length],
+                                borderRadius: 999
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                          {fmtPct(pct)} del gasto anual
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {vista === "mes" && (
-        <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ padding: isDesktop ? "20px 22px 0" : "16px 16px 0" }}>
           <Seccion
             titulo="💰 Ingresos"
             color="#22c55e"
