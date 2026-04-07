@@ -56,11 +56,52 @@ function getInitialData() {
   };
 }
 
+function normalizarNumero(valor) {
+  if (valor === "" || valor === null || valor === undefined) return 0;
+  const n = parseFloat(valor);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function obtenerMovimientosDeValor(valorCategoria) {
+  if (
+    valorCategoria &&
+    typeof valorCategoria === "object" &&
+    !Array.isArray(valorCategoria) &&
+    Array.isArray(valorCategoria.movimientos)
+  ) {
+    return valorCategoria.movimientos;
+  }
+  return [];
+}
+
+function calcularValorCategoria(valorCategoria) {
+  if (
+    valorCategoria &&
+    typeof valorCategoria === "object" &&
+    !Array.isArray(valorCategoria) &&
+    Array.isArray(valorCategoria.movimientos)
+  ) {
+    return valorCategoria.movimientos.reduce(
+      (acc, mov) => acc + normalizarNumero(mov?.importe),
+      0
+    );
+  }
+
+  return normalizarNumero(valorCategoria);
+}
+
 function calcTotales(data, tipo, año, mes) {
   const cats = PRESUPUESTOS[tipo].cats;
   const mesData = data?.[año]?.[tipo]?.[mes] || {};
-  const ing = cats.ingresos.reduce((s, c) => s + (parseFloat(mesData.ingresos?.[c]) || 0), 0);
-  const gas = cats.gastos.reduce((s, c) => s + (parseFloat(mesData.gastos?.[c]) || 0), 0);
+
+  const ing = cats.ingresos.reduce((s, c) => {
+    return s + calcularValorCategoria(mesData.ingresos?.[c]);
+  }, 0);
+
+  const gas = cats.gastos.reduce((s, c) => {
+    return s + calcularValorCategoria(mesData.gastos?.[c]);
+  }, 0);
+
   return { ingresos: ing, gastos: gas, disponible: ing - gas };
 }
 
@@ -78,6 +119,17 @@ function fmtDisplay(n) {
   return (Number(n) || 0).toFixed(2).replace(".", ",") + " €";
 }
 
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return "Sin fecha";
+  const partes = fecha.split("-");
+  if (partes.length !== 3) return fecha;
+  return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const [user, setUser] = useState(null);
@@ -88,6 +140,8 @@ export default function App() {
   const [editando, setEditando] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [inputVal, setInputVal] = useState("");
+  const [movFecha, setMovFecha] = useState(hoyISO());
+  const [movNota, setMovNota] = useState("");
   const [errorCarga, setErrorCarga] = useState("");
 
   const emailActual = (user?.email || "").toLowerCase();
@@ -141,18 +195,112 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [data, user]);
 
-  function getValor(tipo, seccion, cat) {
-    return data?.[año]?.[tipo]?.[mes]?.[seccion]?.[cat] || "";
+  function asegurarRuta(next, tipo, seccion, cat) {
+    if (!next[año]) next[año] = {};
+    if (!next[año][tipo]) next[año][tipo] = {};
+    if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {} };
+    if (!next[año][tipo][mes][seccion]) next[año][tipo][mes][seccion] = {};
+    if (next[año][tipo][mes][seccion][cat] === undefined) {
+      next[año][tipo][mes][seccion][cat] = "";
+    }
   }
 
-  function setValor(tipo, seccion, cat, valor) {
+  function getRawValor(tipo, seccion, cat) {
+    return data?.[año]?.[tipo]?.[mes]?.[seccion]?.[cat];
+  }
+
+  function getValor(tipo, seccion, cat) {
+    return calcularValorCategoria(getRawValor(tipo, seccion, cat));
+  }
+
+  function getMovimientos(tipo, seccion, cat) {
+    return obtenerMovimientosDeValor(getRawValor(tipo, seccion, cat));
+  }
+
+  function setValorManual(tipo, seccion, cat, valor) {
     setData((prev) => {
       const next = JSON.parse(JSON.stringify(prev));
-      if (!next[año]) next[año] = {};
-      if (!next[año][tipo]) next[año][tipo] = {};
-      if (!next[año][tipo][mes]) next[año][tipo][mes] = { ingresos: {}, gastos: {} };
-      if (!next[año][tipo][mes][seccion]) next[año][tipo][mes][seccion] = {};
-      next[año][tipo][mes][seccion][cat] = valor === "" ? "" : parseFloat(valor) || 0;
+      asegurarRuta(next, tipo, seccion, cat);
+      next[año][tipo][mes][seccion][cat] = valor === "" ? "" : normalizarNumero(valor);
+      return next;
+    });
+  }
+
+  function convertirAMovimientosSiHaceFalta(tipo, seccion, cat) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarRuta(next, tipo, seccion, cat);
+
+      const actual = next[año][tipo][mes][seccion][cat];
+
+      if (
+        actual &&
+        typeof actual === "object" &&
+        !Array.isArray(actual) &&
+        Array.isArray(actual.movimientos)
+      ) {
+        return next;
+      }
+
+      const numeroActual = normalizarNumero(actual);
+
+      if (numeroActual === 0) {
+        next[año][tipo][mes][seccion][cat] = { movimientos: [] };
+      } else {
+        next[año][tipo][mes][seccion][cat] = {
+          movimientos: [
+            {
+              importe: numeroActual,
+              fecha: hoyISO(),
+              nota: "Importe inicial"
+            }
+          ]
+        };
+      }
+
+      return next;
+    });
+  }
+
+  function agregarMovimiento(tipo, seccion, cat, movimiento) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarRuta(next, tipo, seccion, cat);
+
+      const actual = next[año][tipo][mes][seccion][cat];
+
+      if (
+        !actual ||
+        typeof actual !== "object" ||
+        Array.isArray(actual) ||
+        !Array.isArray(actual.movimientos)
+      ) {
+        const numeroActual = normalizarNumero(actual);
+        next[año][tipo][mes][seccion][cat] = {
+          movimientos: numeroActual !== 0
+            ? [{
+                importe: numeroActual,
+                fecha: hoyISO(),
+                nota: "Importe inicial"
+              }]
+            : []
+        };
+      }
+
+      next[año][tipo][mes][seccion][cat].movimientos.push(movimiento);
+      return next;
+    });
+  }
+
+  function borrarMovimiento(tipo, seccion, cat, index) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const movimientos = next?.[año]?.[tipo]?.[mes]?.[seccion]?.[cat]?.movimientos;
+
+      if (Array.isArray(movimientos)) {
+        movimientos.splice(index, 1);
+      }
+
       return next;
     });
   }
@@ -162,18 +310,40 @@ export default function App() {
 
     const val = getValor(tipo, seccion, cat);
     setEditando({ tipo, seccion, cat });
-    setInputVal(val === "" ? "" : String(val));
+    setInputVal(val === 0 ? "" : String(val));
+    setMovFecha(hoyISO());
+    setMovNota("");
     setModalAbierto(true);
   }
 
-  function guardarEdicion() {
+  function guardarEdicionManual() {
     if (!editando) return;
     if (!puedeEditarTipo(emailActual, editando.tipo)) return;
 
-    setValor(editando.tipo, editando.seccion, editando.cat, inputVal);
+    setValorManual(editando.tipo, editando.seccion, editando.cat, inputVal);
     setModalAbierto(false);
     setEditando(null);
     setInputVal("");
+    setMovNota("");
+    setMovFecha(hoyISO());
+  }
+
+  function guardarNuevoMovimiento() {
+    if (!editando) return;
+    if (!puedeEditarTipo(emailActual, editando.tipo)) return;
+
+    const importe = normalizarNumero(inputVal);
+    if (!inputVal || !Number.isFinite(importe)) return;
+
+    agregarMovimiento(editando.tipo, editando.seccion, editando.cat, {
+      importe,
+      fecha: movFecha || hoyISO(),
+      nota: movNota.trim()
+    });
+
+    setInputVal("");
+    setMovNota("");
+    setMovFecha(hoyISO());
   }
 
   if (!data) {
@@ -196,6 +366,15 @@ export default function App() {
   const totalesAnuales = calcAnual(data, tab, año);
   const cats = PRESUPUESTOS[tab].cats;
   const disponibleColor = (n) => n >= 0 ? "#22c55e" : "#ef4444";
+  const movimientosActuales = editando ? getMovimientos(editando.tipo, editando.seccion, editando.cat) : [];
+  const usandoMovimientos = editando
+    ? (
+        getRawValor(editando.tipo, editando.seccion, editando.cat) &&
+        typeof getRawValor(editando.tipo, editando.seccion, editando.cat) === "object" &&
+        !Array.isArray(getRawValor(editando.tipo, editando.seccion, editando.cat)) &&
+        Array.isArray(getRawValor(editando.tipo, editando.seccion, editando.cat).movimientos)
+      )
+    : false;
 
   return (
     <div
@@ -486,6 +665,8 @@ export default function App() {
               background: "#1e293b",
               width: "100%",
               maxWidth: 480,
+              maxHeight: "90vh",
+              overflowY: "auto",
               borderRadius: "20px 20px 0 0",
               padding: "24px 20px 40px",
               border: "1px solid #334155"
@@ -493,68 +674,235 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ width: 36, height: 4, background: "#475569", borderRadius: 2, margin: "0 auto 20px" }} />
+
             <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
               {editando.seccion === "ingresos" ? "Ingreso" : "Gasto"} · {MESES[mes]} {año}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>{editando.cat}</div>
 
-            <div style={{ position: "relative", marginBottom: 20 }}>
-              <input
-                autoFocus
-                type="number"
-                inputMode="decimal"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && guardarEdicion()}
-                placeholder="0,00"
-                style={{
-                  width: "100%",
-                  padding: "16px 50px 16px 16px",
-                  fontSize: 20,
-                  fontWeight: 600,
-                  background: "#0f172a",
-                  border: "2px solid #3b82f6",
-                  borderRadius: 12,
-                  color: "#f8fafc",
-                  outline: "none",
-                  boxSizing: "border-box"
-                }}
-              />
-              <span style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 20, color: "#64748b" }}>€</span>
+            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>
+              {editando.cat}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button
-                onClick={() => setModalAbierto(false)}
-                style={{
-                  padding: "14px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#334155",
-                  color: "#94a3b8",
-                  fontSize: 15,
-                  fontWeight: 600,
-                  cursor: "pointer"
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={guardarEdicion}
-                style={{
-                  padding: "14px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#3b82f6",
-                  color: "#fff",
-                  fontSize: 15,
-                  fontWeight: 600,
-                  cursor: "pointer"
-                }}
-              >
-                Guardar
-              </button>
+            <div style={{ fontSize: 14, color: "#93c5fd", marginBottom: 20 }}>
+              Total actual: {fmtDisplay(getValor(editando.tipo, editando.seccion, editando.cat))}
             </div>
+
+            {!usandoMovimientos && (
+              <div style={{ marginBottom: 20 }}>
+                <button
+                  onClick={() => convertirAMovimientosSiHaceFalta(editando.tipo, editando.seccion, editando.cat)}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#334155",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                >
+                  Pasar a modo movimientos
+                </button>
+
+                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
+                  Así podrás añadir varios importes que se suman o restan automáticamente.
+                </div>
+              </div>
+            )}
+
+            {usandoMovimientos ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
+                  Añadir movimiento
+                </div>
+
+                <div style={{ position: "relative", marginBottom: 12 }}>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    placeholder="Ej. 50 o -10"
+                    style={{
+                      width: "100%",
+                      padding: "14px 50px 14px 14px",
+                      fontSize: 18,
+                      fontWeight: 600,
+                      background: "#0f172a",
+                      border: "2px solid #3b82f6",
+                      borderRadius: 12,
+                      color: "#f8fafc",
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 18, color: "#64748b" }}>€</span>
+                </div>
+
+                <input
+                  type="date"
+                  value={movFecha}
+                  onChange={(e) => setMovFecha(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    marginBottom: 12,
+                    borderRadius: 10,
+                    border: "1px solid #475569",
+                    background: "#0f172a",
+                    color: "#fff",
+                    boxSizing: "border-box"
+                  }}
+                />
+
+                <input
+                  type="text"
+                  value={movNota}
+                  onChange={(e) => setMovNota(e.target.value)}
+                  placeholder="Nota opcional: Repsol, BP..."
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    marginBottom: 14,
+                    borderRadius: 10,
+                    border: "1px solid #475569",
+                    background: "#0f172a",
+                    color: "#fff",
+                    boxSizing: "border-box"
+                  }}
+                />
+
+                <button
+                  onClick={guardarNuevoMovimiento}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#3b82f6",
+                    color: "#fff",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    marginBottom: 20
+                  }}
+                >
+                  Añadir movimiento
+                </button>
+
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
+                  Historial
+                </div>
+
+                {movimientosActuales.length === 0 ? (
+                  <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20 }}>
+                    Todavía no hay movimientos.
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 20 }}>
+                    {movimientosActuales.map((mov, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          background: "#0f172a",
+                          border: "1px solid #334155",
+                          borderRadius: 12,
+                          padding: "12px 14px",
+                          marginBottom: 10
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: normalizarNumero(mov.importe) >= 0 ? "#22c55e" : "#f87171" }}>
+                              {fmtDisplay(normalizarNumero(mov.importe))}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+                              {formatearFecha(mov.fecha)}{mov.nota ? ` · ${mov.nota}` : ""}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => borrarMovimiento(editando.tipo, editando.seccion, editando.cat, index)}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              border: "none",
+                              background: "#450a0a",
+                              color: "#fecaca",
+                              cursor: "pointer"
+                            }}
+                          >
+                            Borrar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ position: "relative", marginBottom: 20 }}>
+                  <input
+                    autoFocus
+                    type="number"
+                    inputMode="decimal"
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && guardarEdicionManual()}
+                    placeholder="0,00"
+                    style={{
+                      width: "100%",
+                      padding: "16px 50px 16px 16px",
+                      fontSize: 20,
+                      fontWeight: 600,
+                      background: "#0f172a",
+                      border: "2px solid #3b82f6",
+                      borderRadius: 12,
+                      color: "#f8fafc",
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 20, color: "#64748b" }}>€</span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button
+                    onClick={() => setModalAbierto(false)}
+                    style={{
+                      padding: "14px",
+                      borderRadius: 12,
+                      border: "none",
+                      background: "#334155",
+                      color: "#94a3b8",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={guardarEdicionManual}
+                    style={{
+                      padding: "14px",
+                      borderRadius: 12,
+                      border: "none",
+                      background: "#3b82f6",
+                      color: "#fff",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Guardar total
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
