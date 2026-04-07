@@ -1,8 +1,10 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
-export async function cargarPresupuesto(uid) {
-  const ref = doc(db, "presupuestos", uid);
+const DOC_ID = "presupuesto-compartido";
+
+export async function cargarPresupuesto() {
+  const ref = doc(db, "presupuestos", DOC_ID);
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
@@ -12,8 +14,8 @@ export async function cargarPresupuesto(uid) {
   return null;
 }
 
-export async function guardarPresupuesto(uid, data) {
-  const ref = doc(db, "presupuestos", uid);
+export async function guardarPresupuesto(data) {
+  const ref = doc(db, "presupuestos", DOC_ID);
 
   await setDoc(
     ref,
