@@ -391,6 +391,9 @@ export default function App() {
   const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
   const [emojiNuevaCategoria, setEmojiNuevaCategoria] = useState("📦");
 
+  const [modalGestionApartados, setModalGestionApartados] = useState(false);
+  const [apartadoAEliminar, setApartadoAEliminar] = useState(null);
+
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
 
@@ -604,7 +607,9 @@ export default function App() {
       asegurarMeta(next);
 
       const yaExisteBase = BASE_PRESUPUESTOS[tab].cats[seccionNuevaCategoria].includes(nombre);
-      const yaExisteCustom = getCustomCats(next, tab, seccionNuevaCategoria).some((x) => x.name.toLowerCase() === nombre.toLowerCase());
+      const yaExisteCustom = getCustomCats(next, tab, seccionNuevaCategoria).some(
+        (x) => x.name.toLowerCase() === nombre.toLowerCase()
+      );
 
       if (yaExisteBase || yaExisteCustom) return next;
 
@@ -620,6 +625,33 @@ export default function App() {
     setEmojiNuevaCategoria("📦");
     setSeccionNuevaCategoria("gastos");
     setModalCategoriaAbierto(false);
+  }
+
+  function borrarCategoriaPersonalizada(tipo, seccion, nombreCategoria) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+
+      next._meta.customCats[tipo][seccion] =
+        next._meta.customCats[tipo][seccion].filter(
+          (item) => item.name !== nombreCategoria
+        );
+
+      Object.keys(next).forEach((yearKey) => {
+        if (yearKey === "_meta") return;
+        if (!next[yearKey]?.[tipo]) return;
+
+        Object.keys(next[yearKey][tipo]).forEach((mesKey) => {
+          if (next[yearKey][tipo][mesKey]?.[seccion]?.[nombreCategoria] !== undefined) {
+            delete next[yearKey][tipo][mesKey][seccion][nombreCategoria];
+          }
+        });
+      });
+
+      return next;
+    });
+
+    setApartadoAEliminar(null);
   }
 
   function abrirEdicion(tipo, seccion, cat) {
@@ -725,10 +757,10 @@ export default function App() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0b1220",
+        background: "linear-gradient(180deg, #0b1220 0%, #0f172a 45%, #101826 100%)",
         color: "#f1f5f9",
         fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-        maxWidth: isDesktop ? 1240 : 500,
+        maxWidth: isDesktop ? 1380 : 500,
         margin: "0 auto",
         paddingBottom: 90
       }}
@@ -1117,21 +1149,43 @@ export default function App() {
       {vista === "mes" && (
         <div style={{ padding: isDesktop ? "20px 22px 0" : "16px 16px 0" }}>
           {puedeEditarTabActual && (
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginBottom: 14,
+                flexWrap: "wrap"
+              }}
+            >
               <button
                 onClick={() => setModalCategoriaAbierto(true)}
                 style={{
                   border: "none",
-                  borderRadius: 12,
-                  padding: "10px 14px",
-                  background: "#2563eb",
+                  borderRadius: 14,
+                  padding: "12px 16px",
+                  background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                   color: "#fff",
-                  fontWeight: 700,
+                  fontWeight: 800,
                   cursor: "pointer",
-                  boxShadow: "0 8px 24px rgba(37,99,235,0.25)"
+                  boxShadow: "0 10px 24px rgba(37,99,235,0.28)"
                 }}
               >
                 ➕ Añadir apartado
+              </button>
+
+              <button
+                onClick={() => setModalGestionApartados(true)}
+                style={{
+                  border: "1px solid #334155",
+                  borderRadius: 14,
+                  padding: "12px 16px",
+                  background: "#172033",
+                  color: "#e2e8f0",
+                  fontWeight: 800,
+                  cursor: "pointer"
+                }}
+              >
+                🗂️ Gestionar apartados
               </button>
             </div>
           )}
@@ -1394,6 +1448,197 @@ export default function App() {
                 }}
               >
                 Guardar apartado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalGestionApartados && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000000cc",
+            zIndex: 130,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setModalGestionApartados(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              background: "#1e293b",
+              borderRadius: 22,
+              padding: "22px 18px",
+              border: "1px solid #334155",
+              maxHeight: "85vh",
+              overflowY: "auto"
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
+              Gestionar apartados
+            </div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>
+              Aquí puedes borrar los apartados personalizados de {BASE_PRESUPUESTOS[tab].label}.
+            </div>
+
+            {["ingresos", "gastos"].map((seccion) => {
+              const custom = getCustomCats(data, tab, seccion);
+
+              return (
+                <div key={seccion} style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>
+                    {seccion === "ingresos" ? "💰 Ingresos personalizados" : "💸 Gastos personalizados"}
+                  </div>
+
+                  {custom.length === 0 ? (
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        background: "#0f172a",
+                        color: "#94a3b8",
+                        fontSize: 13,
+                        border: "1px solid #243042"
+                      }}
+                    >
+                      No hay apartados personalizados.
+                    </div>
+                  ) : (
+                    custom.map((item) => (
+                      <div
+                        key={item.name}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "12px 14px",
+                          marginBottom: 8,
+                          borderRadius: 14,
+                          background: "#0f172a",
+                          border: "1px solid #243042"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 20 }}>{item.emoji || "📦"}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>{item.name}</span>
+                        </div>
+
+                        <button
+                          onClick={() => setApartadoAEliminar({ tipo: tab, seccion, nombre: item.name })}
+                          style={{
+                            border: "none",
+                            borderRadius: 10,
+                            padding: "9px 12px",
+                            background: "#7f1d1d",
+                            color: "#fff",
+                            fontWeight: 700,
+                            cursor: "pointer"
+                          }}
+                        >
+                          Borrar
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })}
+
+            <button
+              onClick={() => setModalGestionApartados(false)}
+              style={{
+                width: "100%",
+                padding: "13px",
+                borderRadius: 12,
+                border: "none",
+                background: "#334155",
+                color: "#fff",
+                fontWeight: 800,
+                cursor: "pointer"
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {apartadoAEliminar && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000000cc",
+            zIndex: 140,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setApartadoAEliminar(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "#1e293b",
+              borderRadius: 20,
+              padding: "22px 18px",
+              border: "1px solid #334155"
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 8 }}>
+              Borrar apartado
+            </div>
+
+            <div style={{ fontSize: 14, color: "#cbd5e1", marginBottom: 18 }}>
+              ¿Seguro que quieres borrar <strong>{apartadoAEliminar.nombre}</strong>? También se eliminarán sus valores guardados.
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button
+                onClick={() => setApartadoAEliminar(null)}
+                style={{
+                  padding: "12px",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#334155",
+                  color: "#fff",
+                  fontWeight: 800,
+                  cursor: "pointer"
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={() =>
+                  borrarCategoriaPersonalizada(
+                    apartadoAEliminar.tipo,
+                    apartadoAEliminar.seccion,
+                    apartadoAEliminar.nombre
+                  )
+                }
+                style={{
+                  padding: "12px",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#b91c1c",
+                  color: "#fff",
+                  fontWeight: 800,
+                  cursor: "pointer"
+                }}
+              >
+                Sí, borrar
               </button>
             </div>
           </div>
@@ -1708,12 +1953,12 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
   return (
     <div
       style={{
-        background: "linear-gradient(180deg, #172033 0%, #111827 100%)",
-        borderRadius: 18,
-        marginBottom: 16,
+        background: "linear-gradient(180deg, #182235 0%, #111827 100%)",
+        borderRadius: 24,
+        marginBottom: 18,
         overflow: "hidden",
-        border: "1px solid #243042",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.18)"
+        border: "1px solid #263246",
+        boxShadow: "0 18px 40px rgba(0,0,0,0.28)"
       }}
     >
       <div
@@ -1722,22 +1967,27 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "14px 16px",
+          padding: "16px 18px",
           cursor: "pointer",
-          borderBottom: abierta ? "1px solid #243042" : "none"
+          borderBottom: abierta ? "1px solid #223044" : "none"
         }}
       >
-        <span style={{ fontWeight: 900, fontSize: 15 }}>{titulo}</span>
+        <div>
+          <div style={{ fontWeight: 900, fontSize: 17 }}>{titulo}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>
+            {cats.length} apartados
+          </div>
+        </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 900,
               color,
               background: `${color}18`,
               border: `1px solid ${color}30`,
-              padding: "6px 10px",
+              padding: "8px 12px",
               borderRadius: 999
             }}
           >
@@ -1748,7 +1998,14 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
       </div>
 
       {abierta && (
-        <div style={{ padding: "10px" }}>
+        <div
+          style={{
+            padding: 12,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 10
+          }}
+        >
           {cats.map((cat) => {
             const val = getValor(tipo, seccion, cat);
             const tieneValor = val !== "" && val !== 0;
@@ -1758,67 +2015,70 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                 key={cat}
                 onClick={() => editable && onTap(tipo, seccion, cat)}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "12px 14px",
-                  marginBottom: 8,
-                  borderRadius: 14,
-                  border: "1px solid #223044",
-                  background: tieneValor ? "#0f172a" : "#111827",
+                  borderRadius: 18,
+                  border: "1px solid #253246",
+                  background: tieneValor
+                    ? "linear-gradient(180deg, #0f172a 0%, #111827 100%)"
+                    : "#111827",
+                  padding: "14px",
                   cursor: editable ? "pointer" : "default",
                   opacity: editable ? 1 : 0.75,
-                  transition: "transform 0.15s, background 0.15s"
+                  minHeight: 96,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <div
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 12,
-                      display: "grid",
-                      placeItems: "center",
-                      background: `${color}18`,
-                      border: `1px solid ${color}26`,
-                      flexShrink: 0
-                    }}
-                  >
-                    <span style={{ fontSize: 18 }}>{getEmojiCategoria(data, tipo, seccion, cat)}</span>
-                  </div>
-
-                  <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 14,
-                        fontWeight: tieneValor ? 800 : 600,
-                        color: tieneValor ? "#f8fafc" : "#94a3b8",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
+                        width: 42,
+                        height: 42,
+                        borderRadius: 14,
+                        display: "grid",
+                        placeItems: "center",
+                        background: `${color}18`,
+                        border: `1px solid ${color}24`,
+                        flexShrink: 0
                       }}
                     >
-                      {cat}
+                      <span style={{ fontSize: 20 }}>{getEmojiCategoria(data, tipo, seccion, cat)}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                      {editable ? "Toca para editar o añadir movimientos" : "Solo lectura"}
+
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#f8fafc",
+                          lineHeight: 1.2,
+                          wordBreak: "break-word"
+                        }}
+                      >
+                        {cat}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                  <span
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 900,
-                      color: tieneValor ? color : "#475569"
-                    }}
-                  >
-                    {tieneValor ? `${parseFloat(val).toFixed(2)}€` : "—"}
-                  </span>
                   <span style={{ fontSize: 12, color: "#64748b" }}>
                     {editable ? "✏️" : "🔒"}
                   </span>
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 900,
+                      color: tieneValor ? color : "#64748b"
+                    }}
+                  >
+                    {tieneValor ? `${parseFloat(val).toFixed(2)}€` : "—"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>
+                    {editable ? "Editar o añadir movimientos" : "Solo lectura"}
+                  </div>
                 </div>
               </div>
             );
