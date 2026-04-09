@@ -786,7 +786,7 @@ const GLOBAL_CSS = `
     .month-strip { justify-content: flex-start; }
 
     .kpi-grid {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: 1fr;
       gap: 10px;
       padding: 16px 16px 0;
     }
@@ -795,7 +795,11 @@ const GLOBAL_CSS = `
 
     .content-area { padding: 16px 16px 80px; }
 
-    .cats-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .cats-grid { grid-template-columns: 1fr; gap: 10px; }
+
+    .insight-grid, .history-grid { grid-template-columns: 1fr; }
+
+    .month-strip { justify-content: flex-start; }
 
     .annual-grid { grid-template-columns: 1fr; }
 
@@ -876,6 +880,157 @@ const GLOBAL_CSS = `
   }
 
   .mobile-year { flex-shrink: 0; }
+
+
+  .month-health-card {
+    background: linear-gradient(180deg, rgba(17,28,43,0.98) 0%, rgba(12,21,33,0.98) 100%);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+
+  .month-health-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .month-health-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .status-pill {
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .progress-track {
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.35s ease;
+  }
+
+  .insight-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .mini-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+  }
+
+  .mini-card-title {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 10px;
+  }
+
+  .mini-card-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .mini-card-sub {
+    font-size: 12px;
+    color: var(--subtle);
+    margin-top: 8px;
+    line-height: 1.45;
+  }
+
+  .alert-list {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .alert-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .alert-item.warn {
+    border-color: rgba(248,116,57,0.28);
+    background: rgba(248,116,57,0.08);
+  }
+
+  .alert-item.good {
+    border-color: rgba(34,208,122,0.22);
+    background: rgba(34,208,122,0.07);
+  }
+
+  .history-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    margin-top: 14px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .history-item.active {
+    border-color: rgba(59,124,244,0.35);
+    background: rgba(59,124,244,0.08);
+  }
+
+  .kpi-card, .section-card, .notes-card, .history-card, .mini-card, .month-health-card, .annual-table-card, .stat-card {
+    animation: fadeUp 0.28s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 
 
   /* ─── ERROR BANNER ─── */
@@ -1083,6 +1238,11 @@ function resumirTopCategorias(items, topN = 5) {
 
 function fmtDisplay(n) {
   return (Number(n) || 0).toFixed(2).replace(".", ",") + " €";
+}
+
+function fmtSignedDisplay(n) {
+  const num = Number(n) || 0;
+  return `${num < 0 ? "-" : ""}${Math.abs(num).toFixed(2).replace(".", ",")} €`;
 }
 
 function fmtPct(n) {
@@ -1511,6 +1671,40 @@ export default function App() {
   const mesesConGasto = MESES.reduce((acc, _, i) => acc + (calcTotales(data, tab, año, i).gastos > 0 ? 1 : 0), 0);
   const mediaMensualGasto = mesesConGasto > 0 ? totalGastoAnual / mesesConGasto : 0;
 
+  const prevRef = mes === 0 ? { año: año - 1, mes: 11 } : { año, mes: mes - 1 };
+  const totalesMesAnterior = calcTotales(data, tab, prevRef.año, prevRef.mes);
+  const deltaDisponible = totales.disponible - totalesMesAnterior.disponible;
+  const ratioGastoIngresos = totales.ingresos > 0 ? (totales.gastos / totales.ingresos) * 100 : (totales.gastos > 0 ? 100 : 0);
+  const progressWidth = Math.min(ratioGastoIngresos, 100);
+  const ratioColor = ratioGastoIngresos <= 70 ? "var(--green)" : ratioGastoIngresos <= 100 ? "var(--orange)" : "var(--red)";
+  const estadoMes = ratioGastoIngresos > 100 ? "En rojo" : ratioGastoIngresos > 85 ? "Ajustado" : "Bajo control";
+  const categoriasGastoMes = cats.gastos
+    .map((cat) => ({ categoria: cat, total: getValor(tab, "gastos", cat) }))
+    .filter((item) => item.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const principalGastoMes = categoriasGastoMes[0] || null;
+  const mediaHistoricaDisponible = MESES.reduce((acc, _, i) => acc + calcTotales(data, tab, año, i).disponible, 0) / 12;
+  const alertas = [];
+  if (totales.disponible < 0) {
+    alertas.push({ tipo: "warn", icono: "⚠️", texto: `Este mes vas en negativo por ${fmtDisplay(Math.abs(totales.disponible))}.` });
+  }
+  if (ratioGastoIngresos > 100 && totales.ingresos > 0) {
+    alertas.push({ tipo: "warn", icono: "📈", texto: `Has gastado ${fmtPct(ratioGastoIngresos)} de tus ingresos.` });
+  }
+  if (principalGastoMes && principalGastoMes.total > 0) {
+    const pctPrincipal = totales.gastos > 0 ? (principalGastoMes.total / totales.gastos) * 100 : 0;
+    if (pctPrincipal >= 35) {
+      alertas.push({ tipo: "warn", icono: "🎯", texto: `${principalGastoMes.categoria} concentra ${fmtPct(pctPrincipal)} del gasto del mes.` });
+    }
+  }
+  if (totales.disponible > 0 && deltaDisponible >= 0) {
+    alertas.push({ tipo: "good", icono: "✅", texto: `Vas mejor que ${MESES[prevRef.mes]}: ${fmtSignedDisplay(deltaDisponible)} frente al mes anterior.` });
+  }
+  if (alertas.length === 0) {
+    alertas.push({ tipo: "good", icono: "👌", texto: "Mes estable: no hay alertas importantes en este momento." });
+  }
+  const historialMeses = MESES.map((nombre, i) => ({ nombre, index: i, ...calcTotales(data, tab, año, i) }));
+
   const kpiData = [
     { label: "Ingresos",    val: vista === "mes" ? totales.ingresos   : totalesAnuales.ingresos,   color: "var(--green)",  cls: "income",    icon: "↑" },
     { label: "Gastos",      val: vista === "mes" ? totales.gastos     : totalesAnuales.gastos,     color: "var(--orange)", cls: "expense",   icon: "↓" },
@@ -1609,10 +1803,6 @@ export default function App() {
           </div>
 
           <div className="topbar-actions">
-            <div className="view-toggle">
-              <button className={`view-btn ${vista === "mes" ? "active" : ""}`} onClick={() => setVista("mes")}>📅 Mensual</button>
-              <button className={`view-btn ${vista === "anual" ? "active" : ""}`} onClick={() => setVista("anual")}>📊 Anual</button>
-            </div>
 
             {vista === "mes" && (
               <div className="month-strip">
@@ -1642,7 +1832,7 @@ export default function App() {
                 {label}
               </div>
               <div className="kpi-value syne nums" style={{ color }}>
-                {fmtDisplay(Math.abs(val))}
+                {label === "Disponible" ? fmtSignedDisplay(val) : fmtDisplay(val)}
               </div>
               <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
                 {vista === "mes" ? MESES[mes] : `Todo ${año}`}
@@ -1697,7 +1887,7 @@ export default function App() {
                       <span style={{ fontSize: 12, color: "var(--green)" }}>{t.ingresos > 0 ? fmtDisplay(t.ingresos) : "—"}</span>
                       <span style={{ fontSize: 12, color: "var(--orange)" }}>{t.gastos > 0 ? fmtDisplay(t.gastos) : "—"}</span>
                       <span style={{ fontSize: 12, fontWeight: 800, color: disponibleColor(t.disponible) }}>
-                        {hasDatos ? fmtDisplay(t.disponible) : "—"}
+                        {hasDatos ? fmtSignedDisplay(t.disponible) : "—"}
                       </span>
                     </div>
                   );
@@ -1706,7 +1896,7 @@ export default function App() {
                   <span style={{ fontSize: 12, fontWeight: 800, fontFamily: "Syne, sans-serif" }}>TOTAL</span>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "var(--green)" }}>{fmtDisplay(totalesAnuales.ingresos)}</span>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "var(--orange)" }}>{fmtDisplay(totalesAnuales.gastos)}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: disponibleColor(totalesAnuales.disponible) }}>{fmtDisplay(totalesAnuales.disponible)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: disponibleColor(totalesAnuales.disponible) }}>{fmtSignedDisplay(totalesAnuales.disponible)}</span>
                 </div>
               </div>
 
@@ -1781,6 +1971,73 @@ export default function App() {
           {/* ─── MONTHLY VIEW ─── */}
           {vista === "mes" && (
             <>
+              <div className="month-health-card">
+                <div className="month-health-top">
+                  <div>
+                    <div className="month-health-title">Estado del mes</div>
+                    <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 4 }}>
+                      Has gastado {fmtPct(ratioGastoIngresos)} de tus ingresos en {MESES[mes]}.
+                    </div>
+                  </div>
+                  <span
+                    className="status-pill"
+                    style={{
+                      color: ratioColor,
+                      background: `${ratioColor}18`,
+                      border: `1px solid ${ratioColor}30`
+                    }}
+                  >
+                    {estadoMes}
+                  </span>
+                </div>
+                <div className="progress-track">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${progressWidth}%`,
+                      background: ratioGastoIngresos > 100
+                        ? 'linear-gradient(90deg, var(--orange) 0%, var(--red) 100%)'
+                        : 'linear-gradient(90deg, var(--green) 0%, var(--accent) 100%)'
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 10, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
+                  <span>Ingresos: <strong className="nums" style={{ color: "var(--text)" }}>{fmtDisplay(totales.ingresos)}</strong></span>
+                  <span>Gastos: <strong className="nums" style={{ color: "var(--text)" }}>{fmtDisplay(totales.gastos)}</strong></span>
+                  <span>Disponible: <strong className="nums" style={{ color: disponibleColor(totales.disponible) }}>{fmtSignedDisplay(totales.disponible)}</strong></span>
+                </div>
+              </div>
+
+              <div className="insight-grid">
+                <div className="mini-card">
+                  <div className="mini-card-title">Comparación con mes anterior</div>
+                  <div className="mini-card-value nums" style={{ color: deltaDisponible >= 0 ? "var(--green)" : "var(--red)" }}>
+                    {fmtSignedDisplay(deltaDisponible)}
+                  </div>
+                  <div className="mini-card-sub">
+                    Frente a {MESES[prevRef.mes]} {prevRef.año !== año ? prevRef.año : ""}. Disponible anterior: <span className="nums">{fmtSignedDisplay(totalesMesAnterior.disponible)}</span>
+                  </div>
+                </div>
+
+                <div className="mini-card">
+                  <div className="mini-card-title">Media del año</div>
+                  <div className="mini-card-value nums" style={{ color: disponibleColor(mediaHistoricaDisponible) }}>
+                    {fmtSignedDisplay(mediaHistoricaDisponible)}
+                  </div>
+                  <div className="mini-card-sub">
+                    Balance medio mensual de {año} para {BASE_PRESUPUESTOS[tab].label}.
+                  </div>
+                </div>
+              </div>
+
+              <div className="alert-list">
+                {alertas.map((alerta, index) => (
+                  <div key={`${alerta.tipo}-${index}`} className={`alert-item ${alerta.tipo}`}>
+                    <span style={{ fontSize: 18, lineHeight: 1 }}>{alerta.icono}</span>
+                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>{alerta.texto}</div>
+                  </div>
+                ))}
+              </div>
               <Seccion
                 titulo="Ingresos"
                 color="var(--green)"
@@ -1806,6 +2063,31 @@ export default function App() {
                 editable={puedeEditarTabActual}
                 data={data}
               />
+
+              <div className="history-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 15, fontWeight: 700 }}>Historial del año</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Resumen rápido del disponible por mes.</div>
+                  </div>
+                  <div className="nums" style={{ fontSize: 12, color: "var(--subtle)", fontWeight: 700 }}>{año}</div>
+                </div>
+                <div className="history-grid">
+                  {historialMeses.map((item) => (
+                    <div key={item.index} className={`history-item ${item.index === mes ? "active" : ""}`}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{item.nombre.slice(0, 3)}</div>
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                          {item.ingresos > 0 || item.gastos > 0 ? `${fmtDisplay(item.ingresos)} / ${fmtDisplay(item.gastos)}` : 'Sin datos'}
+                        </div>
+                      </div>
+                      <div className="nums" style={{ fontSize: 13, fontWeight: 700, color: disponibleColor(item.disponible) }}>
+                        {item.ingresos > 0 || item.gastos > 0 ? fmtSignedDisplay(item.disponible) : '—'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Notes */}
               <div className="notes-card">
@@ -1833,7 +2115,7 @@ export default function App() {
                     {MESES[mes]} — Dinero disponible
                   </div>
                   <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#fff" }}>
-                    {fmtDisplay(totales.disponible)}
+                    {fmtSignedDisplay(totales.disponible)}
                   </div>
                 </div>
                 <div style={{ fontSize: 36 }}>
