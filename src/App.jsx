@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { cargarPresupuesto, guardarPresupuesto } from "./presupuestoDb";
@@ -1151,6 +1151,11 @@ function getInitialData() {
         familiar: { ingresos: [], gastos: [] },
         adri: { ingresos: [], gastos: [] },
         gisela: { ingresos: [], gastos: [] }
+      },
+      automatismos: {
+        familiar: [],
+        adri: [],
+        gisela: []
       }
     }
   };
@@ -1185,16 +1190,127 @@ function asegurarMeta(data) {
       gisela: { ingresos: [], gastos: [] }
     };
   }
+  if (!data._meta.automatismos) {
+    data._meta.automatismos = {
+      familiar: [],
+      adri: [],
+      gisela: []
+    };
+  }
   for (const tipo of ["familiar", "adri", "gisela"]) {
     if (!data._meta.customCats[tipo]) data._meta.customCats[tipo] = { ingresos: [], gastos: [] };
     if (!Array.isArray(data._meta.customCats[tipo].ingresos)) data._meta.customCats[tipo].ingresos = [];
     if (!Array.isArray(data._meta.customCats[tipo].gastos)) data._meta.customCats[tipo].gastos = [];
+    if (!Array.isArray(data._meta.automatismos[tipo])) data._meta.automatismos[tipo] = [];
   }
   return data;
 }
 
 function getCustomCats(data, tipo, seccion) {
   return data?._meta?.customCats?.[tipo]?.[seccion] || [];
+}
+
+function getAutomatismos(data, tipo) {
+  return data?._meta?.automatismos?.[tipo] || [];
+}
+
+function crearIdUnico() {
+  return `auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function ymDesdeFechaMes(fechaMes) {
+  if (!fechaMes || typeof fechaMes !== "string") return null;
+  const partes = fechaMes.split("-");
+  if (partes.length !== 2) return null;
+  const year = parseInt(partes[0], 10);
+  const month = parseInt(partes[1], 10) - 1;
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11) return null;
+  return { año: year, mes: month };
+}
+
+function fechaMesDesdeYM(año, mes) {
+  return `${año}-${String(mes + 1).padStart(2, "0")}`;
+}
+
+function compararFechaMes(a, b) {
+  if (!a || !b) return 0;
+  if (a.año !== b.año) return a.año - b.año;
+  return a.mes - b.mes;
+}
+
+function limiteDiaMes(año, mes, dia) {
+  return Math.max(1, Math.min(Number(dia) || 1, new Date(año, mes + 1, 0).getDate()));
+}
+
+function aplicarAutomatismosPendientes(data, fechaRef = new Date()) {
+  const next = JSON.parse(JSON.stringify(data));
+  asegurarMeta(next);
+
+  const hoy = {
+    año: fechaRef.getFullYear(),
+    mes: fechaRef.getMonth(),
+    dia: fechaRef.getDate()
+  };
+
+  let cambios = 0;
+
+  for (const tipo of ["familiar", "adri", "gisela"]) {
+    const automatismos = getAutomatismos(next, tipo);
+    const catsGastos = getAllCats(next, tipo, "gastos");
+
+    automatismos.forEach((auto) => {
+      if (!auto?.activo) return;
+      if (auto?.seccion && auto.seccion !== "gastos") return;
+      if (!auto?.categoria || !catsGastos.includes(auto.categoria)) return;
+
+      const desde = ymDesdeFechaMes(auto.desde);
+      if (!desde) return;
+      const hasta = auto.ilimitado ? { año: hoy.año, mes: hoy.mes } : ymDesdeFechaMes(auto.hasta);
+      if (!hasta) return;
+
+      let cursor = { ...desde };
+      while (compararFechaMes(cursor, hasta) <= 0 && compararFechaMes(cursor, { año: hoy.año, mes: hoy.mes }) <= 0) {
+        const esMesActual = cursor.año === hoy.año && cursor.mes === hoy.mes;
+        const diaAplicacion = limiteDiaMes(cursor.año, cursor.mes, auto.dia || 1);
+        const yaToca = !esMesActual || hoy.dia >= diaAplicacion;
+
+        if (yaToca) {
+          asegurarMeta(next);
+          if (!next[cursor.año]) next[cursor.año] = {};
+          if (!next[cursor.año][tipo]) next[cursor.año][tipo] = {};
+          if (!next[cursor.año][tipo][cursor.mes]) next[cursor.año][tipo][cursor.mes] = { ingresos: {}, gastos: {}, notasMes: "" };
+          if (!next[cursor.año][tipo][cursor.mes].gastos) next[cursor.año][tipo][cursor.mes].gastos = {};
+
+          let actual = next[cursor.año][tipo][cursor.mes].gastos[auto.categoria];
+          if (!actual || typeof actual !== "object" || Array.isArray(actual) || !Array.isArray(actual.movimientos)) {
+            const num = normalizarNumero(actual);
+            actual = { movimientos: num !== 0 ? [{ importe: num, fecha: hoyISO(), nota: "Importe inicial" }] : [] };
+            next[cursor.año][tipo][cursor.mes].gastos[auto.categoria] = actual;
+          }
+
+          const yaExiste = actual.movimientos.some((mov) => mov?.automatismoId === auto.id && mov?.fecha?.slice(0, 7) === fechaMesDesdeYM(cursor.año, cursor.mes));
+          if (!yaExiste) {
+            actual.movimientos.push({
+              importe: Math.abs(normalizarNumero(auto.importe)),
+              fecha: `${cursor.año}-${String(cursor.mes + 1).padStart(2, "0")}-${String(diaAplicacion).padStart(2, "0")}`,
+              nota: auto.nota?.trim() || "Automatismo mensual",
+              automatismoId: auto.id,
+              automatico: true
+            });
+            cambios += 1;
+          }
+        }
+
+        if (cursor.mes === 11) {
+          cursor = { año: cursor.año + 1, mes: 0 };
+        } else {
+          cursor = { año: cursor.año, mes: cursor.mes + 1 };
+        }
+      }
+    });
+  }
+
+  return { next, cambios };
 }
 
 function getAllCats(data, tipo, seccion) {
@@ -1437,6 +1553,15 @@ export default function App() {
   const [emojiNuevaCategoria, setEmojiNuevaCategoria] = useState("📦");
   const [modalGestionApartados, setModalGestionApartados] = useState(false);
   const [apartadoAEliminar, setApartadoAEliminar] = useState(null);
+  const [modalAutomatismosAbierto, setModalAutomatismosAbierto] = useState(false);
+  const [automatismoDia, setAutomatismoDia] = useState(15);
+  const [automatismoCategoria, setAutomatismoCategoria] = useState("");
+  const [automatismoImporte, setAutomatismoImporte] = useState("");
+  const [automatismoDesde, setAutomatismoDesde] = useState(`${AÑO_ACTUAL}-${String(MES_ACTUAL + 1).padStart(2, "0")}`);
+  const [automatismoHasta, setAutomatismoHasta] = useState(`${AÑO_ACTUAL + 1}-12`);
+  const [automatismoIlimitado, setAutomatismoIlimitado] = useState(false);
+  const [automatismoNota, setAutomatismoNota] = useState("");
+  const firmaAutoAplicadaRef = useRef("");
 
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
@@ -1484,6 +1609,24 @@ export default function App() {
     const nota = data?.[año]?.[tab]?.[mes]?.notasMes || "";
     setNotaMesInput(nota);
   }, [data, año, mes, tab]);
+
+  useEffect(() => {
+    if (!data) return;
+    const catsGastos = getAllCats(data, tab, "gastos");
+    if (!automatismoCategoria || !catsGastos.includes(automatismoCategoria)) {
+      setAutomatismoCategoria(catsGastos[0] || "");
+    }
+  }, [data, tab, automatismoCategoria]);
+
+  useEffect(() => {
+    if (!data || !user) return;
+    const hoyFirma = new Date().toISOString().slice(0, 10);
+    const firma = `${hoyFirma}::${JSON.stringify(data?._meta?.automatismos || {})}`;
+    if (firmaAutoAplicadaRef.current === firma) return;
+    const { next, cambios } = aplicarAutomatismosPendientes(data, new Date());
+    firmaAutoAplicadaRef.current = firma;
+    if (cambios > 0) setData(next);
+  }, [data, user]);
 
   function asegurarRuta(next, tipo, seccion, cat) {
     asegurarMeta(next);
@@ -1574,6 +1717,62 @@ export default function App() {
     });
   }
 
+
+  function guardarAutomatismo() {
+    if (!puedeEditarTabActual) return;
+    const categoria = automatismoCategoria;
+    const importe = Math.abs(normalizarNumero(automatismoImporte));
+    const dia = Math.max(1, Math.min(31, parseInt(automatismoDia, 10) || 1));
+    if (!categoria || !importe || !automatismoDesde) return;
+
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+      next._meta.automatismos[tab].push({
+        id: crearIdUnico(),
+        activo: true,
+        seccion: "gastos",
+        categoria,
+        importe,
+        dia,
+        desde: automatismoDesde,
+        hasta: automatismoIlimitado ? null : automatismoHasta,
+        ilimitado: automatismoIlimitado,
+        nota: automatismoNota.trim(),
+        creadoEn: new Date().toISOString()
+      });
+      return next;
+    });
+
+    setAutomatismoImporte("");
+    setAutomatismoDia(15);
+    setAutomatismoNota("");
+    setAutomatismoIlimitado(false);
+    setAutomatismoDesde(`${año}-${String(mes + 1).padStart(2, "0")}`);
+    setAutomatismoHasta(`${año + 1}-12`);
+    setModalAutomatismosAbierto(false);
+  }
+
+  function cambiarEstadoAutomatismo(tipo, automatismoId, activo) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+      next._meta.automatismos[tipo] = next._meta.automatismos[tipo].map((item) =>
+        item.id === automatismoId ? { ...item, activo } : item
+      );
+      return next;
+    });
+  }
+
+  function borrarAutomatismo(tipo, automatismoId) {
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+      next._meta.automatismos[tipo] = next._meta.automatismos[tipo].filter((item) => item.id !== automatismoId);
+      return next;
+    });
+  }
+
   function agregarCategoriaPersonalizada() {
     if (!puedeEditarTabActual) return;
     const nombre = nombreNuevaCategoria.trim();
@@ -1654,6 +1853,11 @@ export default function App() {
   const cats = useMemo(() => {
     if (!data) return { ingresos: [], gastos: [] };
     return { ingresos: getAllCats(data, tab, "ingresos"), gastos: getAllCats(data, tab, "gastos") };
+  }, [data, tab]);
+
+  const automatismosTabActual = useMemo(() => {
+    if (!data) return [];
+    return getAutomatismos(data, tab);
   }, [data, tab]);
 
   if (!data) {
@@ -1773,6 +1977,10 @@ export default function App() {
               <span className="tab-icon">🗂</span>
               Gestionar apartados
             </button>
+            <button className="sidebar-tab" onClick={() => setModalAutomatismosAbierto(true)}>
+              <span className="tab-icon">🔁</span>
+              Automatizar gastos
+            </button>
           </div>
         )}
 
@@ -1871,6 +2079,66 @@ export default function App() {
               <button className="btn-secondary" onClick={() => setModalGestionApartados(true)}>
                 🗂 Gestionar
               </button>
+              <button className="btn-secondary" onClick={() => setModalAutomatismosAbierto(true)}>
+                🔁 Automatismos
+              </button>
+            </div>
+          )}
+
+          {vista === "mes" && (
+            <div className="section-card" style={{ marginBottom: 20 }}>
+              <div className="section-header open" onClick={() => puedeEditarTabActual && setModalAutomatismosAbierto(true)}>
+                <div className="section-title-wrap">
+                  <div
+                    style={{
+                      width: 38, height: 38,
+                      borderRadius: 12,
+                      background: "rgba(59,124,244,0.14)",
+                      border: "1px solid rgba(59,124,244,0.20)",
+                      display: "grid", placeItems: "center",
+                      fontSize: 18
+                    }}
+                  >
+                    🔁
+                  </div>
+                  <div>
+                    <div className="section-title syne">Automatismos mensuales</div>
+                    <div className="section-count">{automatismosTabActual.length} reglas en {BASE_PRESUPUESTOS[tab].label}</div>
+                  </div>
+                </div>
+                {puedeEditarTabActual && (
+                  <div className="section-total-badge nums" style={{ color: "var(--accent2)", background: "rgba(59,124,244,0.14)", border: "1px solid rgba(59,124,244,0.24)" }}>
+                    Gestionar
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: "0 16px 16px" }}>
+                {automatismosTabActual.length === 0 ? (
+                  <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)", fontSize: 13 }}>
+                    No hay gastos automatizados todavía.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {automatismosTabActual.map((auto) => (
+                      <div key={auto.id} className="mov-item" style={{ marginBottom: 0 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>
+                            {getEmojiCategoria(data, tab, "gastos", auto.categoria)} {auto.categoria} · {fmtDisplay(auto.importe)}
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                            Día {auto.dia} · desde {auto.desde}{auto.ilimitado ? " · sin fin" : ` · hasta ${auto.hasta}`} · {auto.activo ? "activo" : "pausado"}
+                          </div>
+                        </div>
+                        {puedeEditarTabActual && (
+                          <button className="btn-secondary" style={{ padding: "8px 12px", borderRadius: 10 }} onClick={() => setModalAutomatismosAbierto(true)}>
+                            Ver
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -2269,6 +2537,170 @@ export default function App() {
                 onClick={() => borrarCategoriaPersonalizada(apartadoAEliminar.tipo, apartadoAEliminar.seccion, apartadoAEliminar.nombre)}
               >Sí, borrar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: Automatismos ─── */}
+      {modalAutomatismosAbierto && (
+        <div className="modal-overlay" style={{ alignItems: "center" }} onClick={() => setModalAutomatismosAbierto(false)}>
+          <div className="modal-box" style={{ maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Automatizar gastos</div>
+            <div className="modal-subtitle">
+              Crea reglas mensuales para {BASE_PRESUPUESTOS[tab].label}. Se ejecutan automáticamente al entrar en la app y puedes pausarlas o borrarlas cuando quieras.
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="form-label">Apartado</label>
+              <select className="form-input" value={automatismoCategoria} onChange={(e) => setAutomatismoCategoria(e.target.value)}>
+                {cats.gastos.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="form-label">Importe mensual</label>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="form-input-lg nums"
+                  value={automatismoImporte}
+                  onChange={(e) => setAutomatismoImporte(e.target.value)}
+                  placeholder="0,00"
+                />
+                <span className="input-suffix">€</span>
+              </div>
+            </div>
+
+            <div className="choice-grid" style={{ marginBottom: 14 }}>
+              <div>
+                <label className="form-label">Día del mes</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  className="form-input"
+                  value={automatismoDia}
+                  onChange={(e) => setAutomatismoDia(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="form-label">Desde</label>
+                <input
+                  type="month"
+                  className="form-input"
+                  value={automatismoDesde}
+                  onChange={(e) => setAutomatismoDesde(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="form-label">Fin</label>
+              <div className="choice-grid" style={{ marginBottom: 10 }}>
+                <button
+                  className={`choice-btn ${!automatismoIlimitado ? "active-blue" : ""}`}
+                  onClick={() => setAutomatismoIlimitado(false)}
+                >
+                  Hasta fecha
+                </button>
+                <button
+                  className={`choice-btn ${automatismoIlimitado ? "active-green" : ""}`}
+                  onClick={() => setAutomatismoIlimitado(true)}
+                >
+                  Ilimitado
+                </button>
+              </div>
+              {!automatismoIlimitado && (
+                <input
+                  type="month"
+                  className="form-input"
+                  value={automatismoHasta}
+                  onChange={(e) => setAutomatismoHasta(e.target.value)}
+                />
+              )}
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label className="form-label">Nota opcional</label>
+              <input
+                className="form-input"
+                value={automatismoNota}
+                onChange={(e) => setAutomatismoNota(e.target.value)}
+                placeholder="Ej. Suscripción PS5"
+              />
+            </div>
+
+            <div className="choice-grid" style={{ marginBottom: 24 }}>
+              <button className="choice-btn" onClick={() => setModalAutomatismosAbierto(false)}>Cerrar</button>
+              <button
+                className="choice-btn active-blue"
+                style={{ fontWeight: 800 }}
+                onClick={guardarAutomatismo}
+              >
+                Guardar automatismo
+              </button>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--subtle)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+              Reglas actuales
+            </div>
+
+            {automatismosTabActual.length === 0 ? (
+              <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", color: "var(--muted)", fontSize: 13, border: "1px solid var(--border)" }}>
+                No hay automatismos creados.
+              </div>
+            ) : (
+              automatismosTabActual.map((auto) => (
+                <div key={auto.id} style={{ padding: "14px", marginBottom: 10, borderRadius: 16, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800 }}>
+                        {getEmojiCategoria(data, tab, "gastos", auto.categoria)} {auto.categoria} · {fmtDisplay(auto.importe)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                        Día {auto.dia} · desde {auto.desde} · {auto.ilimitado ? "sin fin" : `hasta ${auto.hasta}`}
+                      </div>
+                      {auto.nota && (
+                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>{auto.nota}</div>
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: auto.activo ? "var(--green)" : "var(--muted)",
+                        background: auto.activo ? "rgba(34,208,122,0.12)" : "rgba(138,164,194,0.08)",
+                        border: auto.activo ? "1px solid rgba(34,208,122,0.22)" : "1px solid var(--border)"
+                      }}
+                    >
+                      {auto.activo ? "Activo" : "Pausado"}
+                    </span>
+                  </div>
+                  <div className="choice-grid">
+                    <button
+                      className={`choice-btn ${auto.activo ? "" : "active-green"}`}
+                      onClick={() => cambiarEstadoAutomatismo(tab, auto.id, !auto.activo)}
+                    >
+                      {auto.activo ? "Pausar" : "Reactivar"}
+                    </button>
+                    <button
+                      className="choice-btn"
+                      style={{ background: "rgba(240,82,82,0.15)", borderColor: "var(--red)", color: "var(--red)", fontWeight: 800 }}
+                      onClick={() => borrarAutomatismo(tab, auto.id)}
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
