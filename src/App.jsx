@@ -781,8 +781,16 @@ const GLOBAL_CSS = `
       gap: 12px;
     }
 
-    .topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .topbar-actions { width: 100%; justify-content: flex-start; }
+    .topbar-top { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; }
+    .topbar-user { width: 100%; }
+    .topbar-actions { width: 100%; justify-content: flex-start; order: 2; }
+    .mobile-year {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      order: 3;
+      margin-top: 2px;
+    }
     .month-strip { justify-content: flex-start; }
 
     .kpi-grid {
@@ -879,7 +887,12 @@ const GLOBAL_CSS = `
     justify-content: flex-end;
   }
 
-  .mobile-year { flex-shrink: 0; }
+  .mobile-year {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+  }
 
 
   .month-health-card {
@@ -1788,8 +1801,19 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mobile-only year selector */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }} className="mobile-year">
+            <div className="topbar-actions">
+              {vista === "mes" && (
+                <div className="month-strip">
+                  {MESES.map((m, i) => (
+                    <button key={i} className={`month-btn ${mes === i ? "active" : ""}`} onClick={() => setMes(i)}>
+                      {m.slice(0, 3)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mobile-year">
               <button
                 onClick={() => setAño((y) => y - 1)}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--subtle)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
@@ -1800,19 +1824,6 @@ export default function App() {
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--subtle)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
               >{año + 1}</button>
             </div>
-          </div>
-
-          <div className="topbar-actions">
-
-            {vista === "mes" && (
-              <div className="month-strip">
-                {MESES.map((m, i) => (
-                  <button key={i} className={`month-btn ${mes === i ? "active" : ""}`} onClick={() => setMes(i)}>
-                    {m.slice(0, 3)}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </header>
 
@@ -2008,7 +2019,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="insight-grid">
+              <div className="insight-grid single-card">
                 <div className="mini-card">
                   <div className="mini-card-title">Comparación con mes anterior</div>
                   <div className="mini-card-value nums" style={{ color: deltaDisponible >= 0 ? "var(--green)" : "var(--red)" }}>
@@ -2019,15 +2030,6 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mini-card">
-                  <div className="mini-card-title">Media del año</div>
-                  <div className="mini-card-value nums" style={{ color: disponibleColor(mediaHistoricaDisponible) }}>
-                    {fmtSignedDisplay(mediaHistoricaDisponible)}
-                  </div>
-                  <div className="mini-card-sub">
-                    Balance medio mensual de {año} para {BASE_PRESUPUESTOS[tab].label}.
-                  </div>
-                </div>
               </div>
 
               <div className="alert-list">
