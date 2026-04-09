@@ -2085,63 +2085,6 @@ export default function App() {
             </div>
           )}
 
-          {vista === "mes" && (
-            <div className="section-card" style={{ marginBottom: 20 }}>
-              <div className="section-header open" onClick={() => puedeEditarTabActual && setModalAutomatismosAbierto(true)}>
-                <div className="section-title-wrap">
-                  <div
-                    style={{
-                      width: 38, height: 38,
-                      borderRadius: 12,
-                      background: "rgba(59,124,244,0.14)",
-                      border: "1px solid rgba(59,124,244,0.20)",
-                      display: "grid", placeItems: "center",
-                      fontSize: 18
-                    }}
-                  >
-                    🔁
-                  </div>
-                  <div>
-                    <div className="section-title syne">Automatismos mensuales</div>
-                    <div className="section-count">{automatismosTabActual.length} reglas en {BASE_PRESUPUESTOS[tab].label}</div>
-                  </div>
-                </div>
-                {puedeEditarTabActual && (
-                  <div className="section-total-badge nums" style={{ color: "var(--accent2)", background: "rgba(59,124,244,0.14)", border: "1px solid rgba(59,124,244,0.24)" }}>
-                    Gestionar
-                  </div>
-                )}
-              </div>
-              <div style={{ padding: "0 16px 16px" }}>
-                {automatismosTabActual.length === 0 ? (
-                  <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)", fontSize: 13 }}>
-                    No hay gastos automatizados todavía.
-                  </div>
-                ) : (
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {automatismosTabActual.map((auto) => (
-                      <div key={auto.id} className="mov-item" style={{ marginBottom: 0 }}>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>
-                            {getEmojiCategoria(data, tab, "gastos", auto.categoria)} {auto.categoria} · {fmtDisplay(auto.importe)}
-                          </div>
-                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-                            Día {auto.dia} · desde {auto.desde}{auto.ilimitado ? " · sin fin" : ` · hasta ${auto.hasta}`} · {auto.activo ? "activo" : "pausado"}
-                          </div>
-                        </div>
-                        {puedeEditarTabActual && (
-                          <button className="btn-secondary" style={{ padding: "8px 12px", borderRadius: 10 }} onClick={() => setModalAutomatismosAbierto(true)}>
-                            Ver
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* ─── ANNUAL VIEW ─── */}
           {vista === "anual" && (
             <div className="annual-grid">
@@ -2287,27 +2230,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="insight-grid single-card">
-                <div className="mini-card">
-                  <div className="mini-card-title">Comparación con mes anterior</div>
-                  <div className="mini-card-value nums" style={{ color: deltaDisponible >= 0 ? "var(--green)" : "var(--red)" }}>
-                    {fmtSignedDisplay(deltaDisponible)}
-                  </div>
-                  <div className="mini-card-sub">
-                    Frente a {MESES[prevRef.mes]} {prevRef.año !== año ? prevRef.año : ""}. Disponible anterior: <span className="nums">{fmtSignedDisplay(totalesMesAnterior.disponible)}</span>
-                  </div>
-                </div>
-
-              </div>
-
-              <div className="alert-list">
-                {alertas.map((alerta, index) => (
-                  <div key={`${alerta.tipo}-${index}`} className={`alert-item ${alerta.tipo}`}>
-                    <span style={{ fontSize: 18, lineHeight: 1 }}>{alerta.icono}</span>
-                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>{alerta.texto}</div>
-                  </div>
-                ))}
-              </div>
               <Seccion
                 titulo="Ingresos"
                 color="var(--green)"
@@ -2333,6 +2255,83 @@ export default function App() {
                 editable={puedeEditarTabActual}
                 data={data}
               />
+
+              <div className="insight-grid single-card">
+                <div className="mini-card">
+                  <div className="mini-card-title">Comparación con mes anterior</div>
+                  <div className="mini-card-value nums" style={{ color: deltaDisponible >= 0 ? "var(--green)" : "var(--red)" }}>
+                    {fmtSignedDisplay(deltaDisponible)}
+                  </div>
+                  <div className="mini-card-sub">
+                    Frente a {MESES[prevRef.mes]} {prevRef.año !== año ? prevRef.año : ""}. Disponible anterior: <span className="nums">{fmtSignedDisplay(totalesMesAnterior.disponible)}</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="alert-list">
+                {alertas.map((alerta, index) => (
+                  <div key={`${alerta.tipo}-${index}`} className={`alert-item ${alerta.tipo}`}>
+                    <span style={{ fontSize: 18, lineHeight: 1 }}>{alerta.icono}</span>
+                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>{alerta.texto}</div>
+                  </div>
+                ))}
+              </div>
+
+            <div className="section-card" style={{ marginBottom: 20 }}>
+              <div className="section-header open" onClick={() => puedeEditarTabActual && setModalAutomatismosAbierto(true)}>
+                <div className="section-title-wrap">
+                  <div
+                    style={{
+                      width: 38, height: 38,
+                      borderRadius: 12,
+                      background: "rgba(59,124,244,0.14)",
+                      border: "1px solid rgba(59,124,244,0.20)",
+                      display: "grid", placeItems: "center",
+                      fontSize: 18
+                    }}
+                  >
+                    🔁
+                  </div>
+                  <div>
+                    <div className="section-title syne">Automatismos mensuales</div>
+                    <div className="section-count">{automatismosTabActual.length} reglas en {BASE_PRESUPUESTOS[tab].label}</div>
+                  </div>
+                </div>
+                {puedeEditarTabActual && (
+                  <div className="section-total-badge nums" style={{ color: "var(--accent2)", background: "rgba(59,124,244,0.14)", border: "1px solid rgba(59,124,244,0.24)" }}>
+                    Gestionar
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: "0 16px 16px" }}>
+                {automatismosTabActual.length === 0 ? (
+                  <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)", fontSize: 13 }}>
+                    No hay gastos automatizados todavía.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {automatismosTabActual.map((auto) => (
+                      <div key={auto.id} className="mov-item" style={{ marginBottom: 0 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>
+                            {getEmojiCategoria(data, tab, "gastos", auto.categoria)} {auto.categoria} · {fmtDisplay(auto.importe)}
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                            Día {auto.dia} · desde {auto.desde}{auto.ilimitado ? " · sin fin" : ` · hasta ${auto.hasta}`} · {auto.activo ? "activo" : "pausado"}
+                          </div>
+                        </div>
+                        {puedeEditarTabActual && (
+                          <button className="btn-secondary" style={{ padding: "8px 12px", borderRadius: 10 }} onClick={() => setModalAutomatismosAbierto(true)}>
+                            Ver
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
               <div className="history-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
