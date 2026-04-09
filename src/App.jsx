@@ -5,7 +5,7 @@ import { cargarPresupuesto, guardarPresupuesto } from "./presupuestoDb";
 
 /* ─── GLOBAL STYLES injected once ─── */
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500;600;700&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -26,7 +26,7 @@ const GLOBAL_CSS = `
     --sidebar-w: 260px;
   }
 
-  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-variant-numeric: tabular-nums lining-nums; }
 
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -34,7 +34,9 @@ const GLOBAL_CSS = `
 
   input, textarea, button { font-family: inherit; }
 
-  .syne { font-family: 'Syne', sans-serif; }
+  .syne { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+
+  .nums { font-family: 'Space Grotesk', sans-serif; font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.03em; }
 
   /* Sidebar layout */
   .app-shell {
@@ -70,9 +72,10 @@ const GLOBAL_CSS = `
   }
 
   .sidebar-logo .title {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 800;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.05;
     color: var(--text);
   }
 
@@ -156,9 +159,11 @@ const GLOBAL_CSS = `
   .year-btn:hover { background: var(--border); color: var(--text); }
 
   .year-display {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums lining-nums;
     color: var(--text);
     text-align: center;
     flex: 2;
@@ -196,7 +201,7 @@ const GLOBAL_CSS = `
   }
 
   .view-btn {
-    padding: 8px 20px;
+    padding: 8px 18px;
     border-radius: 9px;
     border: none;
     cursor: pointer;
@@ -216,15 +221,20 @@ const GLOBAL_CSS = `
   .month-strip {
     display: flex;
     gap: 6px;
-    overflow-x: auto;
-    padding: 0 4px 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    overflow: visible;
+    padding: 0;
+    min-width: 0;
+    max-width: 100%;
     scrollbar-width: none;
   }
   .month-strip::-webkit-scrollbar { display: none; }
 
   .month-btn {
-    flex-shrink: 0;
-    padding: 6px 14px;
+    flex: 0 0 auto;
+    min-width: 48px;
+    padding: 6px 12px;
     border-radius: 999px;
     border: 1px solid transparent;
     cursor: pointer;
@@ -284,10 +294,12 @@ const GLOBAL_CSS = `
   }
 
   .kpi-value {
-    font-family: 'Syne', sans-serif;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   /* ─── SECTION CARDS ─── */
@@ -320,7 +332,7 @@ const GLOBAL_CSS = `
   .section-title-wrap { display: flex; align-items: center; gap: 10px; }
 
   .section-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
     font-size: 15px;
     font-weight: 700;
     color: var(--text);
@@ -403,9 +415,11 @@ const GLOBAL_CSS = `
   }
 
   .cat-amount {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   .cat-hint {
@@ -515,9 +529,10 @@ const GLOBAL_CSS = `
   }
 
   .modal-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 800;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.05;
     color: var(--text);
     margin-bottom: 6px;
   }
@@ -561,7 +576,7 @@ const GLOBAL_CSS = `
     color: var(--text);
     font-size: 22px;
     font-weight: 800;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
     outline: none;
   }
 
@@ -696,7 +711,7 @@ const GLOBAL_CSS = `
   }
 
   .stat-card-label { font-size: 11px; color: var(--muted); margin-bottom: 8px; letter-spacing: 1px; text-transform: uppercase; }
-  .stat-card-value { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+  .stat-card-value { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
   .stat-card-sub { font-size: 11px; color: var(--muted); }
 
   /* ─── NOTES ─── */
@@ -767,6 +782,8 @@ const GLOBAL_CSS = `
     }
 
     .topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .topbar-actions { width: 100%; justify-content: flex-start; }
+    .month-strip { justify-content: flex-start; }
 
     .kpi-grid {
       grid-template-columns: repeat(3, 1fr);
@@ -818,6 +835,8 @@ const GLOBAL_CSS = `
   @media (min-width: 900px) {
     .mobile-nav { display: none; }
     .topbar-top { display: contents; }
+    .topbar-actions { flex-wrap: nowrap; }
+    .month-strip { flex: 1; }
   }
 
   /* ─── HEADER USER SECTION ─── */
@@ -839,10 +858,25 @@ const GLOBAL_CSS = `
   }
 
   .topbar-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
     font-size: 16px;
-    font-weight: 800;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
   }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .mobile-year { flex-shrink: 0; }
+
 
   /* ─── ERROR BANNER ─── */
   .error-banner {
@@ -1112,7 +1146,7 @@ function DonutChart({ items, total, size = 200, strokeWidth = 26 }) {
         })}
         <circle cx={center} cy={center} r={radius - strokeWidth / 2} fill="var(--card)" />
         <text x="50%" y="46%" textAnchor="middle" fill="var(--muted)" fontSize="10" fontWeight="600" letterSpacing="1">TOTAL</text>
-        <text x="50%" y="58%" textAnchor="middle" fill="var(--text)" fontSize="15" fontWeight="800" fontFamily="Syne, sans-serif">{Math.round(total)}€</text>
+        <text x="50%" y="58%" textAnchor="middle" fill="var(--text)" fontSize="15" fontWeight="700" fontFamily="Space Grotesk, sans-serif">{Math.round(total)}€</text>
       </svg>
     </div>
   );
@@ -1151,14 +1185,14 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span
-            className="section-total-badge"
+            className="section-total-badge nums"
             style={{
               color,
               background: `${color}14`,
               border: `1px solid ${color}28`
             }}
           >
-            {total.toFixed(2)} €
+            {fmtDisplay(total)}
           </span>
           <span style={{ color: "var(--muted)", fontSize: 11, transition: "transform 0.2s", display: "block", transform: abierta ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
         </div>
@@ -1189,10 +1223,10 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                 </div>
                 <div>
                   <div
-                    className="cat-amount"
+                    className="cat-amount nums"
                     style={{ color: tieneValor ? color : "var(--muted)" }}
                   >
-                    {tieneValor ? `${parseFloat(val).toFixed(2)} €` : "—"}
+                    {tieneValor ? fmtDisplay(val) : "—"}
                   </div>
                   <div className="cat-hint">
                     {editable ? "Editar o añadir movimientos" : "Solo lectura"}
@@ -1453,7 +1487,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "grid", placeItems: "center" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 32, fontWeight: 800, color: "var(--text)", marginBottom: 8 }}>
+          <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
             💶 Presupuesto
           </div>
           <div style={{ color: "var(--muted)", fontSize: 14 }}>Cargando...</div>
@@ -1537,7 +1571,7 @@ export default function App() {
 
         <div className="sidebar-year">
           <button className="year-btn" onClick={() => setAño((y) => y - 1)}>◀ {año - 1}</button>
-          <div className="year-display syne">{año}</div>
+          <div className="year-display syne nums">{año}</div>
           <button className="year-btn" onClick={() => setAño((y) => y + 1)}>{año + 1} ▶</button>
         </div>
       </aside>
@@ -1566,7 +1600,7 @@ export default function App() {
                 onClick={() => setAño((y) => y - 1)}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--subtle)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
               >{año - 1}</button>
-              <span style={{ fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 800 }}>{año}</span>
+              <span style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 15, fontWeight: 700 }}>{año}</span>
               <button
                 onClick={() => setAño((y) => y + 1)}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--subtle)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
@@ -1574,7 +1608,7 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div className="topbar-actions">
             <div className="view-toggle">
               <button className={`view-btn ${vista === "mes" ? "active" : ""}`} onClick={() => setVista("mes")}>📅 Mensual</button>
               <button className={`view-btn ${vista === "anual" ? "active" : ""}`} onClick={() => setVista("anual")}>📊 Anual</button>
@@ -1607,8 +1641,8 @@ export default function App() {
                 <span style={{ fontFamily: "monospace", fontSize: 14, color }}>{icon}</span>
                 {label}
               </div>
-              <div className="kpi-value syne" style={{ color }}>
-                {Math.abs(val).toLocaleString("es-ES", { maximumFractionDigits: 0 })} €
+              <div className="kpi-value syne nums" style={{ color }}>
+                {fmtDisplay(Math.abs(val))}
               </div>
               <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
                 {vista === "mes" ? MESES[mes] : `Todo ${año}`}
@@ -1679,7 +1713,7 @@ export default function App() {
               {/* RIGHT: charts & stats */}
               <div className="annual-side">
                 <div className="stat-card">
-                  <div style={{ fontFamily: "Syne, sans-serif", fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Distribución de gastos</div>
+                  <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Distribución de gastos</div>
                   <DonutChart items={categoriasGrafica} total={totalGastoAnual} size={180} strokeWidth={22} />
                   <hr className="sep" />
                   {categoriasGrafica.map((item, index) => {
@@ -1719,7 +1753,7 @@ export default function App() {
                 </div>
 
                 <div className="stat-card">
-                  <div style={{ fontFamily: "Syne, sans-serif", fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Ranking de gastos</div>
+                  <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Ranking de gastos</div>
                   {categoriasGastoAnual.filter((x) => x.total > 0).length === 0 ? (
                     <div style={{ color: "var(--muted)", fontSize: 13 }}>Sin datos suficientes.</div>
                   ) : (
@@ -1777,7 +1811,7 @@ export default function App() {
               <div className="notes-card">
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                   <span style={{ fontSize: 16 }}>📝</span>
-                  <span style={{ fontFamily: "Syne, sans-serif", fontSize: 14, fontWeight: 700 }}>Notas del mes</span>
+                  <span style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 14, fontWeight: 700 }}>Notas del mes</span>
                 </div>
                 <textarea
                   className="notes-textarea"
@@ -1798,7 +1832,7 @@ export default function App() {
                   <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "var(--subtle)", marginBottom: 6 }}>
                     {MESES[mes]} — Dinero disponible
                   </div>
-                  <div style={{ fontFamily: "Syne, sans-serif", fontSize: 32, fontWeight: 800, color: "#fff" }}>
+                  <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#fff" }}>
                     {fmtDisplay(totales.disponible)}
                   </div>
                 </div>
@@ -1964,7 +1998,7 @@ export default function App() {
             <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase", marginBottom: 4 }}>
               {editando.seccion === "ingresos" ? "Ingreso" : "Gasto"} · {MESES[mes]} {año}
             </div>
-            <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 4 }}>
+            <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
               {getEmojiCategoria(data, editando.tipo, editando.seccion, editando.cat)} {editando.cat}
             </div>
             <div style={{ fontSize: 13, color: "var(--accent2)", marginBottom: 22 }}>
@@ -1987,7 +2021,7 @@ export default function App() {
 
             {usandoMovimientos ? (
               <>
-                <div style={{ fontFamily: "Syne, sans-serif", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Añadir movimiento</div>
+                <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Añadir movimiento</div>
 
                 <div className="choice-grid">
                   <button
@@ -2003,7 +2037,7 @@ export default function App() {
                 <div className="input-group">
                   <input
                     type="number" inputMode="decimal"
-                    className="form-input-lg"
+                    className="form-input-lg nums"
                     value={inputVal}
                     onChange={(e) => setInputVal(e.target.value)}
                     placeholder="0,00"
@@ -2034,7 +2068,7 @@ export default function App() {
                   {tipoMovimiento === "abono" ? "➕ Añadir abono" : "➕ Añadir gasto"}
                 </button>
 
-                <div style={{ fontFamily: "Syne, sans-serif", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Historial</div>
+                <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Historial</div>
 
                 {movimientosActuales.length === 0 ? (
                   <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20 }}>Sin movimientos aún.</div>
@@ -2064,7 +2098,7 @@ export default function App() {
                   <input
                     autoFocus
                     type="number" inputMode="decimal"
-                    className="form-input-lg"
+                    className="form-input-lg nums"
                     value={inputVal}
                     onChange={(e) => setInputVal(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && guardarEdicionManual()}
