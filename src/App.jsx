@@ -1401,8 +1401,7 @@ function limpiarTextoPdf(texto) {
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, "-")
-    .replace(/[^ -~
-]/g, " ");
+    .replace(/[^\x20-\x7E]/g, " ");
 }
 
 function partirLineaPdf(texto, maxChars = 88) {
