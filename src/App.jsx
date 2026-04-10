@@ -1156,7 +1156,8 @@ function getInitialData() {
         familiar: [],
         adri: [],
         gisela: []
-      }
+      },
+      backupsVisuales: []
     }
   };
 }
@@ -1196,6 +1197,9 @@ function asegurarMeta(data) {
       adri: [],
       gisela: []
     };
+  }
+  if (!Array.isArray(data._meta.backupsVisuales)) {
+    data._meta.backupsVisuales = [];
   }
   for (const tipo of ["familiar", "adri", "gisela"]) {
     if (!data._meta.customCats[tipo]) data._meta.customCats[tipo] = { ingresos: [], gastos: [] };
@@ -1389,6 +1393,206 @@ function formatearFecha(fecha) {
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
 }
 
+function limpiarTextoPdf(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/€/g, "EUR")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/[^ -~
+]/g, " ");
+}
+
+function partirLineaPdf(texto, maxChars = 88) {
+  const limpio = limpiarTextoPdf(texto).trim();
+  if (!limpio) return [""];
+  const palabras = limpio.split(/\s+/);
+  const lineas = [];
+  let actual = "";
+  palabras.forEach((palabra) => {
+    const candidata = actual ? `${actual} ${palabra}` : palabra;
+    if (candidata.length <= maxChars) {
+      actual = candidata;
+    } else {
+      if (actual) lineas.push(actual);
+      if (palabra.length > maxChars) {
+        for (let i = 0; i < palabra.length; i += maxChars) {
+          lineas.push(palabra.slice(i, i + maxChars));
+        }
+        actual = "";
+      } else {
+        actual = palabra;
+      }
+    }
+  });
+  if (actual) lineas.push(actual);
+  return lineas;
+}
+
+function escaparPdf(texto) {
+  return String(texto || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function crearPdfBasico(lineasPorPagina, nombreArchivo = "documento.pdf") {
+  const width = 595;
+  const height = 842;
+  const objects = [];
+
+  function addObject(body) {
+    objects.push(body);
+    return objects.length;
+  }
+
+  const fontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const pageIds = [];
+
+  lineasPorPagina.forEach((lineas) => {
+    let contenido = "BT\n/F1 11 Tf\n40 800 Td\n14 TL\n";
+    lineas.forEach((linea, idx) => {
+      contenido += `(${escaparPdf(linea)}) Tj\n`;
+      if (idx < lineas.length - 1) contenido += "T*\n";
+    });
+    contenido += "ET";
+    const stream = `<< /Length ${contenido.length} >>\nstream\n${contenido}\nendstream`;
+    const contentId = addObject(stream);
+    const pageId = addObject(`<< /Type /Page /Parent PAGES_REF /MediaBox [0 0 ${width} ${height}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  });
+
+  const kids = pageIds.map((id) => `${id} 0 R`).join(" ");
+  const pagesId = addObject(`<< /Type /Pages /Kids [${kids}] /Count ${pageIds.length} >>`);
+  pageIds.forEach((pageId) => {
+    objects[pageId - 1] = objects[pageId - 1].replace("PAGES_REF", `${pagesId} 0 R`);
+  });
+  const catalogId = addObject(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((obj, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xrefPos = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i <= objects.length; i++) {
+    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+
+  return new File([new Blob([pdf], { type: "application/pdf" })], nombreArchivo, { type: "application/pdf" });
+}
+
+function construirLineasBackupMensual(data, año, mes) {
+  const lineas = [];
+  lineas.push("CIERRE MENSUAL - COPIA VISUAL");
+  lineas.push(`${MESES[mes].toUpperCase()} ${año}`);
+  lineas.push(`Generado: ${new Date().toLocaleString("es-ES")}`);
+  lineas.push("");
+
+  ["familiar", "adri", "gisela"].forEach((tipo) => {
+    const base = BASE_PRESUPUESTOS[tipo];
+    const totales = calcTotales(data, tipo, año, mes);
+    const mesData = data?.[año]?.[tipo]?.[mes] || {};
+    lineas.push("============================================================");
+    lineas.push(`${base.label.toUpperCase()} ${base.icon}`);
+    lineas.push(`Ingresos: ${fmtDisplay(totales.ingresos)} | Gastos: ${fmtDisplay(totales.gastos)} | Disponible: ${fmtSignedDisplay(totales.disponible)}`);
+    lineas.push("");
+
+    ["ingresos", "gastos"].forEach((seccion) => {
+      lineas.push(seccion === "ingresos" ? "INGRESOS" : "GASTOS");
+      const categorias = getAllCats(data, tipo, seccion);
+      const conValor = categorias
+        .map((cat) => ({ cat, raw: mesData?.[seccion]?.[cat], total: calcularValorCategoria(mesData?.[seccion]?.[cat]) }))
+        .filter((item) => item.total !== 0);
+
+      if (conValor.length === 0) {
+        lineas.push("- Sin datos");
+      } else {
+        conValor.forEach((item) => {
+          lineas.push(`- ${item.cat}: ${fmtDisplay(item.total)}`);
+          const movimientos = obtenerMovimientosDeValor(item.raw);
+          movimientos.forEach((mov) => {
+            const etiqueta = `${formatearFecha(mov.fecha)} | ${fmtSignedDisplay(normalizarNumero(mov.importe))}${mov.nota ? ` | ${mov.nota}` : ""}${mov.automatico ? " | AUTO" : ""}`;
+            lineas.push(`   - ${etiqueta}`);
+          });
+        });
+      }
+      lineas.push("");
+    });
+
+    const nota = (mesData?.notasMes || "").trim();
+    lineas.push("NOTAS");
+    if (nota) {
+      partirLineaPdf(nota, 82).forEach((l) => lineas.push(`- ${l}`));
+    } else {
+      lineas.push("- Sin notas");
+    }
+    lineas.push("");
+
+    const automatismos = getAutomatismos(data, tipo).filter((a) => a?.activo);
+    lineas.push("AUTOMATISMOS ACTIVOS");
+    if (automatismos.length === 0) {
+      lineas.push("- Ninguno");
+    } else {
+      automatismos.forEach((auto) => {
+        lineas.push(`- ${auto.categoria}: ${fmtDisplay(auto.importe)} | Dia ${auto.dia} | Desde ${auto.desde}${auto.ilimitado ? " | Sin fin" : ` | Hasta ${auto.hasta || "-"}`}${auto.nota ? ` | ${auto.nota}` : ""}`);
+      });
+    }
+    lineas.push("");
+    lineas.push("");
+  });
+  return lineas;
+}
+
+function paginarLineasPdf(lineas, maxLineasPorPagina = 52) {
+  const paginas = [];
+  let actual = [];
+  lineas.forEach((linea) => {
+    const trozos = partirLineaPdf(linea, 88);
+    trozos.forEach((trozo) => {
+      if (actual.length >= maxLineasPorPagina) {
+        paginas.push(actual);
+        actual = [];
+      }
+      actual.push(trozo);
+    });
+  });
+  if (actual.length) paginas.push(actual);
+  return paginas;
+}
+
+async function subirBackupPdfAFirebase(file, año, mes) {
+  try {
+    const storageModule = await import("firebase/storage");
+    const storage = storageModule.getStorage(auth.app);
+    const path = `backups-visuales/${año}/${String(mes + 1).padStart(2, "0")}/${file.name}`;
+    const storageRef = storageModule.ref(storage, path);
+    await storageModule.uploadBytes(storageRef, file, { contentType: "application/pdf" });
+    const url = await storageModule.getDownloadURL(storageRef);
+    return { ok: true, path, url };
+  } catch (error) {
+    console.error("No se pudo subir el backup visual a Firebase Storage:", error);
+    return { ok: false, error };
+  }
+}
+
+function descargarArchivo(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 function polarToCartesian(cx, cy, r, angleInDegrees) {
   const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
   return { x: cx + r * Math.cos(angleInRadians), y: cy + r * Math.sin(angleInRadians) };
@@ -1554,6 +1758,8 @@ export default function App() {
   const [modalGestionApartados, setModalGestionApartados] = useState(false);
   const [apartadoAEliminar, setApartadoAEliminar] = useState(null);
   const [modalAutomatismosAbierto, setModalAutomatismosAbierto] = useState(false);
+  const [generandoCierre, setGenerandoCierre] = useState(false);
+  const [mensajeBackup, setMensajeBackup] = useState("");
   const [automatismoDia, setAutomatismoDia] = useState(15);
   const [automatismoCategoria, setAutomatismoCategoria] = useState("");
   const [automatismoImporte, setAutomatismoImporte] = useState("");
@@ -1565,6 +1771,7 @@ export default function App() {
 
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
+  const puedeGenerarCierreMensual = emailActual === EMAIL_ADRI;
 
   useEffect(() => {
     function handleResize() { setIsDesktop(window.innerWidth >= 900); }
@@ -1850,6 +2057,52 @@ export default function App() {
     setTipoMovimiento("gasto");
   }
 
+  async function generarCierreMensual() {
+    if (!puedeGenerarCierreMensual || !data || generandoCierre) return;
+    setGenerandoCierre(true);
+    setMensajeBackup("");
+
+    try {
+      const nombreMes = MESES[mes].toLowerCase();
+      const fileName = `cierre-${año}-${String(mes + 1).padStart(2, "0")}-${nombreMes}.pdf`;
+      const lineas = construirLineasBackupMensual(data, año, mes);
+      const paginas = paginarLineasPdf(lineas);
+      const pdfFile = crearPdfBasico(paginas, fileName);
+
+      const resultadoSubida = await subirBackupPdfAFirebase(pdfFile, año, mes);
+      descargarArchivo(pdfFile);
+
+      setData((prev) => {
+        const next = JSON.parse(JSON.stringify(prev));
+        asegurarMeta(next);
+        next._meta.backupsVisuales = [
+          {
+            id: `backup_${Date.now()}`,
+            año,
+            mes,
+            nombre: fileName,
+            creadoEn: new Date().toISOString(),
+            storagePath: resultadoSubida.ok ? resultadoSubida.path : null,
+            downloadURL: resultadoSubida.ok ? resultadoSubida.url : null
+          },
+          ...(next._meta.backupsVisuales || []).filter((b) => !(b.año === año && b.mes === mes && b.nombre === fileName))
+        ].slice(0, 36);
+        return next;
+      });
+
+      setMensajeBackup(
+        resultadoSubida.ok
+          ? `Cierre mensual generado, subido a Firebase Storage y descargado en tu dispositivo.`
+          : `Cierre mensual generado y descargado. La subida a Firebase Storage ha fallado, pero el PDF local sí se ha guardado.`
+      );
+    } catch (error) {
+      console.error("Error generando cierre mensual:", error);
+      setMensajeBackup("No se pudo generar el cierre mensual. Revisa la consola para ver el detalle.");
+    } finally {
+      setGenerandoCierre(false);
+    }
+  }
+
   const cats = useMemo(() => {
     if (!data) return { ingresos: [], gastos: [] };
     return { ingresos: getAllCats(data, tab, "ingresos"), gastos: getAllCats(data, tab, "gastos") };
@@ -1981,6 +2234,12 @@ export default function App() {
               <span className="tab-icon">🔁</span>
               Automatizar gastos
             </button>
+            {puedeGenerarCierreMensual && (
+              <button className="sidebar-tab" onClick={generarCierreMensual}>
+                <span className="tab-icon">📄</span>
+                {generandoCierre ? "Generando cierre..." : "Generar cierre mensual"}
+              </button>
+            )}
           </div>
         )}
 
@@ -2041,6 +2300,11 @@ export default function App() {
             ⚠️ {errorCarga}
           </div>
         )}
+        {mensajeBackup && (
+          <div className="error-banner" style={{ background: "rgba(34,208,122,0.10)", borderColor: "rgba(34,208,122,0.28)", color: "#86efac" }}>
+            📄 {mensajeBackup}
+          </div>
+        )}
 
         {/* KPI GRID */}
         <div className="kpi-grid">
@@ -2082,6 +2346,11 @@ export default function App() {
               <button className="btn-secondary" onClick={() => setModalAutomatismosAbierto(true)}>
                 🔁 Automatismos
               </button>
+              {puedeGenerarCierreMensual && (
+                <button className="btn-secondary" onClick={generarCierreMensual}>
+                  {generandoCierre ? "⏳ Generando..." : "📄 Cierre mensual"}
+                </button>
+              )}
             </div>
           )}
 
