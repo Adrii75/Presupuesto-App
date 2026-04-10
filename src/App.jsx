@@ -1401,7 +1401,8 @@ function limpiarTextoPdf(texto) {
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, "-")
-    .replace(/[^\x20-\x7E]/g, " ");
+    .replace(/[^ -~
+]/g, " ");
 }
 
 function partirLineaPdf(texto, maxChars = 88) {
@@ -1567,13 +1568,29 @@ function paginarLineasPdf(lineas, maxLineasPorPagina = 52) {
 }
 
 async function subirBackupPdfAFirebase(file, año, mes) {
+  const timeout = (ms) => new Promise((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(new Error(`Timeout subiendo backup visual a Firebase Storage tras ${ms}ms`));
+    }, ms);
+  });
+
   try {
     const storageModule = await import("firebase/storage");
     const storage = storageModule.getStorage(auth.app);
     const path = `backups-visuales/${año}/${String(mes + 1).padStart(2, "0")}/${file.name}`;
     const storageRef = storageModule.ref(storage, path);
-    await storageModule.uploadBytes(storageRef, file, { contentType: "application/pdf" });
-    const url = await storageModule.getDownloadURL(storageRef);
+
+    await Promise.race([
+      storageModule.uploadBytes(storageRef, file, { contentType: "application/pdf" }),
+      timeout(12000)
+    ]);
+
+    const url = await Promise.race([
+      storageModule.getDownloadURL(storageRef),
+      timeout(8000)
+    ]);
+
     return { ok: true, path, url };
   } catch (error) {
     console.error("No se pudo subir el backup visual a Firebase Storage:", error);
@@ -2068,35 +2085,11 @@ export default function App() {
       const paginas = paginarLineasPdf(lineas);
       const pdfFile = crearPdfBasico(paginas, fileName);
 
-      const resultadoSubida = await subirBackupPdfAFirebase(pdfFile, año, mes);
       descargarArchivo(pdfFile);
-
-      setData((prev) => {
-        const next = JSON.parse(JSON.stringify(prev));
-        asegurarMeta(next);
-        next._meta.backupsVisuales = [
-          {
-            id: `backup_${Date.now()}`,
-            año,
-            mes,
-            nombre: fileName,
-            creadoEn: new Date().toISOString(),
-            storagePath: resultadoSubida.ok ? resultadoSubida.path : null,
-            downloadURL: resultadoSubida.ok ? resultadoSubida.url : null
-          },
-          ...(next._meta.backupsVisuales || []).filter((b) => !(b.año === año && b.mes === mes && b.nombre === fileName))
-        ].slice(0, 36);
-        return next;
-      });
-
-      setMensajeBackup(
-        resultadoSubida.ok
-          ? `Cierre mensual generado, subido a Firebase Storage y descargado en tu dispositivo.`
-          : `Cierre mensual generado y descargado. La subida a Firebase Storage ha fallado, pero el PDF local sí se ha guardado.`
-      );
+      setMensajeBackup("PDF del cierre mensual generado y descargado.");
     } catch (error) {
       console.error("Error generando cierre mensual:", error);
-      setMensajeBackup("No se pudo generar el cierre mensual. Revisa la consola para ver el detalle.");
+      setMensajeBackup("No se pudo generar el PDF del cierre mensual. Revisa la consola para ver el detalle.");
     } finally {
       setGenerandoCierre(false);
     }
