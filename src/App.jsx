@@ -1567,38 +1567,8 @@ function paginarLineasPdf(lineas, maxLineasPorPagina = 52) {
   return paginas;
 }
 
-async function subirBackupPdfAFirebase(file, año, mes) {
-  const timeout = (ms) => new Promise((_, reject) => {
-    const id = setTimeout(() => {
-      clearTimeout(id);
-      reject(new Error(`Timeout subiendo backup visual a Firebase Storage tras ${ms}ms`));
-    }, ms);
-  });
-
-  try {
-    const storageModule = await import("firebase/storage");
-    const storage = storageModule.getStorage(auth.app);
-    const path = `backups-visuales/${año}/${String(mes + 1).padStart(2, "0")}/${file.name}`;
-    const storageRef = storageModule.ref(storage, path);
-
-    await Promise.race([
-      storageModule.uploadBytes(storageRef, file, { contentType: "application/pdf" }),
-      timeout(12000)
-    ]);
-
-    const url = await Promise.race([
-      storageModule.getDownloadURL(storageRef),
-      timeout(8000)
-    ]);
-
-    return { ok: true, path, url };
-  } catch (error) {
-    console.error("No se pudo subir el backup visual a Firebase Storage:", error);
-    return { ok: false, error };
-  }
-}
-
 function descargarArchivo(file) {
+
   const url = URL.createObjectURL(file);
   const a = document.createElement("a");
   a.href = url;
