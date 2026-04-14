@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { cargarPresupuesto, guardarPresupuesto } from "./presupuestoDb";
+import adriImg from "./assets/adri.png";
+import giselaImg from "./assets/gisela.png";
+import familiaImg from "./assets/familia.png";
 
 /* ─── GLOBAL STYLES injected once ─── */
 const GLOBAL_CSS = `
@@ -1113,10 +1116,23 @@ const CATEGORIAS_GISELA = {
 };
 
 const BASE_PRESUPUESTOS = {
-  familiar: { label: "Familiar", icon: "🏠", cats: CATEGORIAS_FAMILIAR },
-  adri: { label: "Adri", icon: "👤", cats: CATEGORIAS_ADRI },
-  gisela: { label: "Gisela", icon: "👤", cats: CATEGORIAS_GISELA }
+  familiar: { 
+    label: "Familiar", 
+    icon: <img src={familiaImg} style={{ width: 28, height: 28, borderRadius: 8 }} />, 
+    cats: CATEGORIAS_FAMILIAR 
+  },
+  adri: { 
+    label: "Adri", 
+    icon: <img src={adriImg} style={{ width: 28, height: 28, borderRadius: 8 }} />, 
+    cats: CATEGORIAS_ADRI 
+  },
+  gisela: { 
+    label: "Gisela", 
+    icon: <img src={giselaImg} style={{ width: 28, height: 28, borderRadius: 8 }} />, 
+    cats: CATEGORIAS_GISELA 
+  }
 };
+
 
 const STORAGE_KEY = "presupuesto_familiar_v1";
 
