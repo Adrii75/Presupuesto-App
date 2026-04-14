@@ -1344,6 +1344,29 @@ function getAllCats(data, tipo, seccion) {
 function getEmojiCategoria(data, tipo, seccion, cat) {
   const custom = getCustomCats(data, tipo, seccion).find((x) => x.name === cat);
   if (custom?.emoji) return custom.emoji;
+
+  const fotoPorCategoria = {
+    Familiar: familiaImg,
+    Adri: adriImg,
+    Gisela: giselaImg
+  };
+
+  if (fotoPorCategoria[cat]) {
+    return (
+      <img
+        src={fotoPorCategoria[cat]}
+        alt={cat}
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 10,
+          objectFit: "cover",
+          display: "block"
+        }}
+      />
+    );
+  }
+
   return ICONOS_CATEGORIA[cat] || "•";
 }
 
