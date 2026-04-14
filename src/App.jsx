@@ -437,14 +437,15 @@ const GLOBAL_CSS = `
     align-items: center;
     justify-content: space-between;
     border: 1px solid transparent;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
   }
   .balance-banner.positive {
-    background: linear-gradient(135deg, #03200f 0%, #052e16 100%);
-    border-color: rgba(34,208,122,0.2);
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: rgba(34,208,122,0.25);
   }
   .balance-banner.negative {
-    background: linear-gradient(135deg, #2d0707 0%, #450a0a 100%);
-    border-color: rgba(240,82,82,0.2);
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-color: rgba(240,82,82,0.25);
   }
 
   /* ─── TOOLBAR ─── */
@@ -896,11 +897,12 @@ const GLOBAL_CSS = `
 
 
   .month-health-card {
-    background: linear-gradient(180deg, rgba(17,28,43,0.98) 0%, rgba(12,21,33,0.98) 100%);
+    background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
     border: 1px solid var(--border);
     border-radius: 20px;
     padding: 18px 20px;
     margin-bottom: 18px;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
   }
 
   .month-health-top {
@@ -2614,14 +2616,34 @@ export default function App() {
               {/* Balance banner */}
               <div className={`balance-banner ${totales.disponible >= 0 ? "positive" : "negative"}`}>
                 <div>
-                  <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "var(--subtle)", marginBottom: 6 }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 2,
+                      textTransform: "uppercase",
+                      color: totales.disponible >= 0 ? "#047857" : "#b91c1c",
+                      marginBottom: 6
+                    }}
+                  >
                     {MESES[mes]} — Dinero disponible
                   </div>
-                  <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#fff" }}>
+                  <div
+                    style={{
+                      fontFamily: "Space Grotesk, sans-serif",
+                      fontSize: 32,
+                      fontWeight: 700,
+                      color: totales.disponible >= 0 ? "var(--green)" : "var(--red)"
+                    }}
+                  >
                     {fmtSignedDisplay(totales.disponible)}
                   </div>
                 </div>
-                <div style={{ fontSize: 36 }}>
+                <div
+                  style={{
+                    fontSize: 36,
+                    filter: totales.disponible >= 0 ? "saturate(0.95)" : "saturate(1.05)"
+                  }}
+                >
                   {totales.disponible >= 0 ? "✅" : "⚠️"}
                 </div>
               </div>
