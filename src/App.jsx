@@ -10,14 +10,14 @@ const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:       #080d14;
-    --surface:  #0d1520;
-    --card:     #111c2b;
-    --border:   #1a2a3f;
-    --border2:  #243650;
-    --text:     #e8f0fc;
-    --muted:    #4e6a8a;
-    --subtle:   #8aa4c2;
+    --bg:       #f7fbff;
+    --surface:  #ffffff;
+    --card:     #ffffff;
+    --border:   #e6eef8;
+    --border2:  #d1e3f8;
+    --text:     #0b1320;
+    --muted:    #6b7280;
+    --subtle:   #94a3b8;
     --accent:   #3b7cf4;
     --accent2:  #5b9cf9;
     --green:    #22d07a;
@@ -30,7 +30,7 @@ const GLOBAL_CSS = `
 
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
   input, textarea, button { font-family: inherit; }
 
@@ -2007,8 +2007,12 @@ export default function App() {
   function abrirEdicion(tipo, seccion, cat) {
     if (!puedeEditarTipo(emailActual, tipo)) return;
     const val = getValor(tipo, seccion, cat);
+    const raw = getRawValor(tipo, seccion, cat);
+    const yaUsaMovimientos = raw && typeof raw === "object" && !Array.isArray(raw) && Array.isArray(raw.movimientos);
     setEditando({ tipo, seccion, cat });
-    setInputVal(val === 0 ? "" : String(val));
+    // Si la categoría ya usa el modo "movimientos", dejamos el input vacío
+    // para facilitar añadir un nuevo movimiento (no prefijar con el total).
+    setInputVal(yaUsaMovimientos ? "" : (val === 0 ? "" : String(val)));
     setMovFecha(hoyISO());
     setMovNota("");
     setTipoMovimiento("gasto");
