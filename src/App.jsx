@@ -2418,10 +2418,6 @@ export default function App() {
       alertas.push({ tipo: "warn", icono: "🎯", texto: `${principalGastoMes.categoria} concentra ${fmtPct(pctPrincipal)} del gasto del mes.` });
     }
   }
-  if (categoriasPasadas.length > 0) {
-    const peor = categoriasPasadas.sort((a, b) => (b.total - b.presupuesto) - (a.total - a.presupuesto))[0];
-    alertas.push({ tipo: "warn", icono: "🧾", texto: `${peor.categoria} va ${fmtDisplay(peor.total - peor.presupuesto)} por encima del presupuesto.` });
-  }
   if (esMesActual && prediccionDisponibleFinal < 0) {
   }
   if (totales.disponible > 0 && deltaDisponible >= 0) {
