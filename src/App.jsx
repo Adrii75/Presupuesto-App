@@ -2217,19 +2217,6 @@ export default function App() {
     setModalPresupuestoAbierto(true);
   }
 
-  function duplicarMesAnterior() {
-    if (!puedeEditarTabActual) return;
-    const origen = mes === 0 ? { año: año - 1, mes: 11 } : { año, mes: mes - 1 };
-    const origenData = data?.[origen.año]?.[tab]?.[origen.mes];
-    if (!origenData) return;
-    setData((prev) => {
-      const next = JSON.parse(JSON.stringify(prev));
-      asegurarRutaMes(next, tab);
-      next[año][tab][mes] = JSON.parse(JSON.stringify(origenData));
-      return next;
-    });
-    setMensajeBackup(`Se ha copiado ${MESES[origen.mes]} en ${MESES[mes]}.`);
-  }
 
   function procesarQuickAdd() {
     if (!puedeEditarTabActual || !quickAddInput.trim()) return;
@@ -2783,34 +2770,8 @@ export default function App() {
                     style={{ flex: 1, minWidth: 220 }}
                   />
                   <button className="btn-primary" onClick={procesarQuickAdd}>⚡ Añadir rápido</button>
-                  <button className="btn-secondary" onClick={duplicarMesAnterior}>📋 Duplicar mes anterior</button>
                 </div>
               )}
-
-              <div className="insight-grid" style={{ marginBottom: 20 }}>
-                <div className="mini-card">
-                  <div className="mini-card-title">Predicción fin de mes</div>
-                  <div className="mini-card-value nums" style={{ color: prediccionDisponibleFinal >= 0 ? "var(--green)" : "var(--red)" }}>
-                    {fmtSignedDisplay(prediccionDisponibleFinal)}
-                  </div>
-                  <div className="mini-card-sub">
-                    {esMesActual
-                      ? `Media diaria ${fmtDisplay(gastoDiarioMedio)} · ${diasRestantes} días restantes · automatismos pendientes ${fmtDisplay(gastosFijosPendientes)}`
-                      : `Mes cerrado. Gasto final ${fmtDisplay(totales.gastos)}.`}
-                  </div>
-                </div>
-                <div className="mini-card">
-                  <div className="mini-card-title">Presupuesto del mes</div>
-                  <div className="mini-card-value nums" style={{ color: totalPresupuestadoMes > 0 && totales.gastos > totalPresupuestadoMes ? "var(--red)" : "var(--accent2)" }}>
-                    {totalPresupuestadoMes > 0 ? fmtDisplay(totalPresupuestadoMes) : "Sin definir"}
-                  </div>
-                  <div className="mini-card-sub">
-                    {totalPresupuestadoMes > 0
-                      ? `Llevas ${fmtDisplay(totales.gastos)} · ${fmtPct((totales.gastos / totalPresupuestadoMes) * 100)} consumido`
-                      : "Define presupuestos por categoría desde cada gasto."}
-                  </div>
-                </div>
-              </div>
 
               <div className="history-card" style={{ marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
