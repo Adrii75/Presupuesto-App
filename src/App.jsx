@@ -1092,6 +1092,14 @@ function puedeEditarTipo(email, tipo) {
   return false;
 }
 
+function puedeVerTipo(email, tipo) {
+  const e = (email || "").toLowerCase();
+  if (tipo === "familiar") return e === EMAIL_ADRI || e === EMAIL_GISELA;
+  if (tipo === "adri") return e === EMAIL_ADRI;
+  if (tipo === "gisela") return e === EMAIL_GISELA;
+  return false;
+}
+
 const MESES = [
   "Enero","Febrero","Marzo","Abril","Mayo","Junio",
   "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
@@ -1798,6 +1806,10 @@ export default function App() {
   const emailActual = (user?.email || "").toLowerCase();
   const puedeEditarTabActual = puedeEditarTipo(emailActual, tab);
   const puedeGenerarCierreMensual = emailActual === EMAIL_ADRI;
+  const tiposVisibles = useMemo(
+    () => Object.entries(BASE_PRESUPUESTOS).filter(([key]) => puedeVerTipo(emailActual, key)),
+    [emailActual]
+  );
 
   useEffect(() => {
     function handleResize() { setIsDesktop(window.innerWidth >= 900); }
@@ -1805,6 +1817,18 @@ export default function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!emailActual) return;
+    if (!puedeVerTipo(emailActual, tab)) {
+      if (puedeVerTipo(emailActual, "familiar")) {
+        setTab("familiar");
+        return;
+      }
+      const primerTipoVisible = Object.keys(BASE_PRESUPUESTOS).find((tipo) => puedeVerTipo(emailActual, tipo));
+      if (primerTipoVisible) setTab(primerTipoVisible);
+    }
+  }, [emailActual, tab]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -2132,6 +2156,22 @@ export default function App() {
     );
   }
 
+  if (user && !puedeVerTipo(emailActual, tab)) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "grid", placeItems: "center", padding: 24 }}>
+        <div style={{ textAlign: "center", maxWidth: 420, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 20, padding: 24 }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+          <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 24, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+            Acceso no disponible
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.6 }}>
+            Este perfil no puede ver esa sección personal.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const totales = calcTotales(data, tab, año, mes);
   const totalesAnuales = calcAnual(data, tab, año);
   const disponibleColor = (n) => n >= 0 ? "var(--green)" : "var(--red)";
@@ -2213,7 +2253,7 @@ export default function App() {
 
         <div className="sidebar-section" style={{ marginTop: 8 }}>
           <div className="sidebar-section-label">Presupuesto</div>
-          {Object.entries(BASE_PRESUPUESTOS).map(([key, { label, icon }]) => (
+          {tiposVisibles.map(([key, { label, icon }]) => (
             <button
               key={key}
               className={`sidebar-tab ${tab === key ? "active" : ""}`}
@@ -2692,7 +2732,7 @@ export default function App() {
 
         {/* ─── MOBILE BOTTOM NAV ─── */}
         <nav className="mobile-nav">
-          {Object.entries(BASE_PRESUPUESTOS).map(([key, { label, icon }]) => (
+          {tiposVisibles.map(([key, { label, icon }]) => (
             <button
               key={key}
               className={`mobile-nav-btn ${tab === key ? "active" : ""}`}
