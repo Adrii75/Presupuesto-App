@@ -1877,7 +1877,7 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                     </div>
                   )}
                   <div className="cat-hint">
-                    {editable ? (seccion === "gastos" ? "Editar, mover o presupuestar" : "Editar o añadir movimientos") : "Solo lectura"}
+                    {editable ? "Editar o añadir movimientos" : "Solo lectura"}
                   </div>
                 </div>
               </div>
@@ -2423,7 +2423,6 @@ export default function App() {
     alertas.push({ tipo: "warn", icono: "🧾", texto: `${peor.categoria} va ${fmtDisplay(peor.total - peor.presupuesto)} por encima del presupuesto.` });
   }
   if (esMesActual && prediccionDisponibleFinal < 0) {
-    alertas.push({ tipo: "warn", icono: "🔮", texto: `Siguiendo este ritmo cerrarías ${MESES[mes]} en ${fmtSignedDisplay(prediccionDisponibleFinal)}.` });
   }
   if (totales.disponible > 0 && deltaDisponible >= 0) {
     alertas.push({ tipo: "good", icono: "✅", texto: `Vas mejor que ${MESES[prevRef.mes]}: ${fmtSignedDisplay(deltaDisponible)} frente al mes anterior.` });
@@ -3371,16 +3370,11 @@ export default function App() {
             <div style={{ fontSize: 13, color: "var(--accent2)", marginBottom: 12 }}>
               Total actual: {fmtDisplay(getValor(editando.tipo, editando.seccion, editando.cat))}
             </div>
-            {editando.seccion === "gastos" && (
+            {editando.seccion === "gastos" && getResumenAutomatismoCategoria(data, tab, editando.cat) && (
               <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
-                <button className="btn-secondary" style={{ padding: "9px 12px", borderRadius: 10 }} onClick={() => abrirPresupuestoCategoria(editando.cat)}>
-                  🎯 Presupuesto {getPresupuestoCategoria(data, tab, editando.cat) > 0 ? fmtDisplay(getPresupuestoCategoria(data, tab, editando.cat)) : "sin definir"}
-                </button>
-                {getResumenAutomatismoCategoria(data, tab, editando.cat) && (
-                  <div className="btn-secondary" style={{ padding: "9px 12px", borderRadius: 10, cursor: "default" }}>
-                    🔁 Automatizado día {getResumenAutomatismoCategoria(data, tab, editando.cat).proximoDia}
-                  </div>
-                )}
+                <div className="btn-secondary" style={{ padding: "9px 12px", borderRadius: 10, cursor: "default" }}>
+                  🔁 Automatizado día {getResumenAutomatismoCategoria(data, tab, editando.cat).proximoDia}
+                </div>
               </div>
             )}
 
