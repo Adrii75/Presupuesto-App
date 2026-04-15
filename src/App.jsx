@@ -1744,7 +1744,7 @@ function DonutChart({ items, total, size = 200, strokeWidth = 26 }) {
 function TrendBars({ items, activeIndex, onSelect }) {
   const max = Math.max(...items.map((item) => Math.max(Math.abs(item.disponible), item.ingresos, item.gastos, 1)), 1);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 8, alignItems: "end" }}>
+    <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "60px", gap: 8, alignItems: "end", overflowX: "auto", paddingBottom: 6 }}>
       {items.map((item) => {
         const height = Math.max(18, (Math.abs(item.disponible) / max) * 120);
         const active = item.index === activeIndex;
