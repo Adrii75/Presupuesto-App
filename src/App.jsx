@@ -1224,6 +1224,13 @@ function asegurarMeta(data) {
       gisela: []
     };
   }
+  if (!data._meta.presupuestos) {
+    data._meta.presupuestos = {
+      familiar: {},
+      adri: {},
+      gisela: {}
+    };
+  }
   if (!Array.isArray(data._meta.backupsVisuales)) {
     data._meta.backupsVisuales = [];
   }
@@ -1232,6 +1239,7 @@ function asegurarMeta(data) {
     if (!Array.isArray(data._meta.customCats[tipo].ingresos)) data._meta.customCats[tipo].ingresos = [];
     if (!Array.isArray(data._meta.customCats[tipo].gastos)) data._meta.customCats[tipo].gastos = [];
     if (!Array.isArray(data._meta.automatismos[tipo])) data._meta.automatismos[tipo] = [];
+    if (!data._meta.presupuestos[tipo] || typeof data._meta.presupuestos[tipo] !== "object") data._meta.presupuestos[tipo] = {};
   }
   return data;
 }
@@ -1242,6 +1250,60 @@ function getCustomCats(data, tipo, seccion) {
 
 function getAutomatismos(data, tipo) {
   return data?._meta?.automatismos?.[tipo] || [];
+}
+
+function getPresupuestoCategoria(data, tipo, categoria) {
+  return normalizarNumero(data?._meta?.presupuestos?.[tipo]?.[categoria]);
+}
+
+function getResumenAutomatismoCategoria(data, tipo, categoria) {
+  const activos = getAutomatismos(data, tipo).filter((auto) => auto?.activo && auto?.categoria === categoria);
+  if (activos.length === 0) return null;
+  const total = activos.reduce((acc, auto) => acc + normalizarNumero(auto.importe), 0);
+  const proximoDia = activos.map((auto) => Number(auto.dia) || 1).sort((a, b) => a - b)[0] || 1;
+  return { total, reglas: activos.length, proximoDia };
+}
+
+function obtenerTimelineMes(data, tipo, año, mes) {
+  const secciones = ["ingresos", "gastos"];
+  const items = [];
+  secciones.forEach((seccion) => {
+    const categorias = getAllCats(data, tipo, seccion);
+    categorias.forEach((categoria) => {
+      const raw = data?.[año]?.[tipo]?.[mes]?.[seccion]?.[categoria];
+      const movimientos = obtenerMovimientosDeValor(raw);
+      if (movimientos.length > 0) {
+        movimientos.forEach((mov, index) => {
+          items.push({
+            id: `${seccion}-${categoria}-${index}-${mov?.fecha || ''}`,
+            seccion,
+            categoria,
+            fecha: mov?.fecha || `${año}-${String(mes + 1).padStart(2, "0")}-01`,
+            nota: mov?.nota || "",
+            importe: normalizarNumero(mov?.importe),
+            automatico: !!mov?.automatico
+          });
+        });
+      } else {
+        const total = calcularValorCategoria(raw);
+        if (total !== 0) {
+          items.push({
+            id: `${seccion}-${categoria}-manual`,
+            seccion,
+            categoria,
+            fecha: `${año}-${String(mes + 1).padStart(2, "0")}-01`,
+            nota: "Total manual",
+            importe: total,
+            automatico: false
+          });
+        }
+      }
+    });
+  });
+  return items.sort((a, b) => {
+    if (a.fecha === b.fecha) return Math.abs(b.importe) - Math.abs(a.importe);
+    return String(b.fecha).localeCompare(String(a.fecha));
+  });
 }
 
 function crearIdUnico() {
@@ -1679,8 +1741,46 @@ function DonutChart({ items, total, size = 200, strokeWidth = 26 }) {
   );
 }
 
+function TrendBars({ items, activeIndex, onSelect }) {
+  const max = Math.max(...items.map((item) => Math.max(Math.abs(item.disponible), item.ingresos, item.gastos, 1)), 1);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 8, alignItems: "end" }}>
+      {items.map((item) => {
+        const height = Math.max(18, (Math.abs(item.disponible) / max) * 120);
+        const active = item.index === activeIndex;
+        return (
+          <button
+            key={item.index}
+            onClick={() => onSelect?.(item.index)}
+            style={{
+              border: active ? "1px solid rgba(59,124,244,0.35)" : "1px solid var(--border)",
+              background: active ? "rgba(59,124,244,0.06)" : "var(--surface)",
+              borderRadius: 16,
+              padding: 10,
+              cursor: "pointer",
+              minHeight: 180,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "flex-end",
+              gap: 10
+            }}
+          >
+            <div style={{ height: 124, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 30, height, borderRadius: 12, background: item.disponible >= 0 ? "linear-gradient(180deg, var(--green), var(--accent))" : "linear-gradient(180deg, var(--orange), var(--red))" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text)" }}>{item.nombre.slice(0, 3)}</div>
+              <div className="nums" style={{ fontSize: 11, color: item.disponible >= 0 ? "var(--green)" : "var(--red)", marginTop: 4 }}>{fmtSignedDisplay(item.disponible)}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── SECCION COMPONENT ─── */
-function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, editable, data }) {
+function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, editable, data, getBudget, getAutoSummary }) {
   const [abierta, setAbierta] = useState(true);
 
   const iconoSeccion = seccion === "ingresos" ? "💰" : "💸";
@@ -1730,6 +1830,10 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
           {cats.map((cat) => {
             const val = getValor(tipo, seccion, cat);
             const tieneValor = val !== "" && val !== 0;
+            const presupuesto = seccion === "gastos" ? getBudget?.(tipo, cat) || 0 : 0;
+            const ratio = presupuesto > 0 ? (val / presupuesto) * 100 : 0;
+            const ratioColor = ratio <= 80 ? "var(--green)" : ratio <= 100 ? "var(--orange)" : "var(--red)";
+            const auto = seccion === "gastos" ? getAutoSummary?.(tipo, cat) : null;
             return (
               <div
                 key={cat}
@@ -1755,8 +1859,25 @@ function Seccion({ titulo, color, cats, seccion, tipo, getValor, onTap, total, e
                   >
                     {tieneValor ? fmtDisplay(val) : "—"}
                   </div>
+                  {seccion === "gastos" && presupuesto > 0 && (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, fontSize: 10, color: "var(--muted)" }}>
+                        <span>Presupuesto</span>
+                        <span className="nums" style={{ color: ratioColor }}>{fmtDisplay(presupuesto)} · {fmtPct(Math.min(ratio, 999))}</span>
+                      </div>
+                      <div className="rank-bar-bg" style={{ marginTop: 6 }}>
+                        <div className="rank-bar-fill" style={{ width: `${Math.min(ratio, 100)}%`, background: ratioColor }} />
+                      </div>
+                    </>
+                  )}
+                  {auto && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, fontSize: 10, color: "var(--accent2)" }}>
+                      <span>🔁 {auto.reglas} auto</span>
+                      <span className="nums">día {auto.proximoDia}</span>
+                    </div>
+                  )}
                   <div className="cat-hint">
-                    {editable ? "Editar o añadir movimientos" : "Solo lectura"}
+                    {editable ? (seccion === "gastos" ? "Editar, mover o presupuestar" : "Editar o añadir movimientos") : "Solo lectura"}
                   </div>
                 </div>
               </div>
@@ -1794,6 +1915,12 @@ export default function App() {
   const [modalAutomatismosAbierto, setModalAutomatismosAbierto] = useState(false);
   const [generandoCierre, setGenerandoCierre] = useState(false);
   const [mensajeBackup, setMensajeBackup] = useState("");
+  const [busquedaCategoria, setBusquedaCategoria] = useState("");
+  const [ordenCategorias, setOrdenCategorias] = useState("impacto");
+  const [quickAddInput, setQuickAddInput] = useState("");
+  const [modalPresupuestoAbierto, setModalPresupuestoAbierto] = useState(false);
+  const [categoriaPresupuesto, setCategoriaPresupuesto] = useState("");
+  const [valorPresupuesto, setValorPresupuesto] = useState("");
   const [automatismoDia, setAutomatismoDia] = useState(15);
   const [automatismoCategoria, setAutomatismoCategoria] = useState("");
   const [automatismoImporte, setAutomatismoImporte] = useState("");
@@ -2069,6 +2196,58 @@ export default function App() {
     setApartadoAEliminar(null);
   }
 
+  function guardarPresupuestoCategoria() {
+    if (!puedeEditarTabActual || !categoriaPresupuesto) return;
+    const importe = Math.abs(normalizarNumero(valorPresupuesto));
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarMeta(next);
+      next._meta.presupuestos[tab][categoriaPresupuesto] = importe;
+      return next;
+    });
+    setModalPresupuestoAbierto(false);
+    setCategoriaPresupuesto("");
+    setValorPresupuesto("");
+  }
+
+  function abrirPresupuestoCategoria(categoria) {
+    setCategoriaPresupuesto(categoria);
+    const actual = getPresupuestoCategoria(data, tab, categoria);
+    setValorPresupuesto(actual ? String(actual) : "");
+    setModalPresupuestoAbierto(true);
+  }
+
+  function duplicarMesAnterior() {
+    if (!puedeEditarTabActual) return;
+    const origen = mes === 0 ? { año: año - 1, mes: 11 } : { año, mes: mes - 1 };
+    const origenData = data?.[origen.año]?.[tab]?.[origen.mes];
+    if (!origenData) return;
+    setData((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      asegurarRutaMes(next, tab);
+      next[año][tab][mes] = JSON.parse(JSON.stringify(origenData));
+      return next;
+    });
+    setMensajeBackup(`Se ha copiado ${MESES[origen.mes]} en ${MESES[mes]}.`);
+  }
+
+  function procesarQuickAdd() {
+    if (!puedeEditarTabActual || !quickAddInput.trim()) return;
+    const texto = quickAddInput.trim().toLowerCase();
+    const importeMatch = texto.match(/-?\d+(?:[.,]\d+)?/);
+    if (!importeMatch) return;
+    const importe = Math.abs(normalizarNumero(importeMatch[0].replace(',', '.')));
+    const resto = texto.replace(importeMatch[0], '').replace(/^\+/, '').trim();
+    const categorias = getAllCats(data, tab, "gastos");
+    const categoria = categorias.find((cat) => resto.includes(cat.toLowerCase())) || categorias.find((cat) => cat.toLowerCase().split(' ').some((chunk) => chunk && resto.includes(chunk))) || "Otros";
+    agregarMovimiento(tab, "gastos", categoria, {
+      importe,
+      fecha: hoyISO(),
+      nota: `Quick add: ${quickAddInput.trim()}`
+    });
+    setQuickAddInput("");
+  }
+
   function abrirEdicion(tipo, seccion, cat) {
     if (!puedeEditarTipo(emailActual, tipo)) return;
     const val = getValor(tipo, seccion, cat);
@@ -2143,6 +2322,23 @@ export default function App() {
     return getAutomatismos(data, tab);
   }, [data, tab]);
 
+  const catsFiltradas = useMemo(() => {
+    const filtro = busquedaCategoria.trim().toLowerCase();
+    const ordenar = (seccion, lista) => {
+      const base = [...lista].filter((cat) => !filtro || cat.toLowerCase().includes(filtro));
+      if (ordenCategorias === "alfabetico") return base.sort((a, b) => a.localeCompare(b));
+      return base.sort((a, b) => {
+        const diff = getValor(tab, seccion, b) - getValor(tab, seccion, a);
+        if (diff !== 0) return diff;
+        return a.localeCompare(b);
+      });
+    };
+    return {
+      ingresos: ordenar("ingresos", cats.ingresos),
+      gastos: ordenar("gastos", cats.gastos)
+    };
+  }, [busquedaCategoria, ordenCategorias, cats, data, tab, año, mes]);
+
   if (!data) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "grid", placeItems: "center" }}>
@@ -2195,11 +2391,33 @@ export default function App() {
   const ratioColor = ratioGastoIngresos <= 70 ? "var(--green)" : ratioGastoIngresos <= 100 ? "var(--orange)" : "var(--red)";
   const estadoMes = ratioGastoIngresos > 100 ? "En rojo" : ratioGastoIngresos > 85 ? "Ajustado" : "Bajo control";
   const categoriasGastoMes = cats.gastos
-    .map((cat) => ({ categoria: cat, total: getValor(tab, "gastos", cat) }))
-    .filter((item) => item.total > 0)
+    .map((cat) => ({ categoria: cat, total: getValor(tab, "gastos", cat), presupuesto: getPresupuestoCategoria(data, tab, cat) }))
+    .filter((item) => item.total > 0 || item.presupuesto > 0)
     .sort((a, b) => b.total - a.total);
   const principalGastoMes = categoriasGastoMes[0] || null;
   const mediaHistoricaDisponible = MESES.reduce((acc, _, i) => acc + calcTotales(data, tab, año, i).disponible, 0) / 12;
+  const totalPresupuestadoMes = cats.gastos.reduce((acc, cat) => acc + getPresupuestoCategoria(data, tab, cat), 0);
+  const categoriasPasadas = categoriasGastoMes.filter((item) => item.presupuesto > 0 && item.total > item.presupuesto);
+  const timelineMes = obtenerTimelineMes(data, tab, año, mes);
+  const historialMeses = MESES.map((nombre, i) => ({ nombre, index: i, ...calcTotales(data, tab, año, i) }));
+  const movimientosGastoMes = timelineMes.filter((item) => item.seccion === "gastos");
+  const diasMes = new Date(año, mes + 1, 0).getDate();
+  const hoy = new Date();
+  const esMesActual = hoy.getFullYear() === año && hoy.getMonth() === mes;
+  const diaActual = esMesActual ? hoy.getDate() : diasMes;
+  const diasConsumidos = Math.max(1, Math.min(diaActual, diasMes));
+  const diasRestantes = Math.max(0, diasMes - diaActual);
+  const gastoDiarioMedio = totales.gastos / diasConsumidos;
+  const gastosFijosPendientes = automatismosTabActual
+    .filter((auto) => auto?.activo)
+    .reduce((acc, auto) => {
+      const diaAuto = Number(auto?.dia) || 1;
+      if (!esMesActual) return acc;
+      return acc + (diaAuto > diaActual ? normalizarNumero(auto.importe) : 0);
+    }, 0);
+  const prediccionGastoFinal = esMesActual ? totales.gastos + gastoDiarioMedio * diasRestantes + gastosFijosPendientes : totales.gastos;
+  const prediccionDisponibleFinal = totales.ingresos - prediccionGastoFinal;
+  const deltaMediaDisponible = totales.disponible - mediaHistoricaDisponible;
   const alertas = [];
   if (totales.disponible < 0) {
     alertas.push({ tipo: "warn", icono: "⚠️", texto: `Este mes vas en negativo por ${fmtDisplay(Math.abs(totales.disponible))}.` });
@@ -2213,13 +2431,22 @@ export default function App() {
       alertas.push({ tipo: "warn", icono: "🎯", texto: `${principalGastoMes.categoria} concentra ${fmtPct(pctPrincipal)} del gasto del mes.` });
     }
   }
+  if (categoriasPasadas.length > 0) {
+    const peor = categoriasPasadas.sort((a, b) => (b.total - b.presupuesto) - (a.total - a.presupuesto))[0];
+    alertas.push({ tipo: "warn", icono: "🧾", texto: `${peor.categoria} va ${fmtDisplay(peor.total - peor.presupuesto)} por encima del presupuesto.` });
+  }
+  if (esMesActual && prediccionDisponibleFinal < 0) {
+    alertas.push({ tipo: "warn", icono: "🔮", texto: `Siguiendo este ritmo cerrarías ${MESES[mes]} en ${fmtSignedDisplay(prediccionDisponibleFinal)}.` });
+  }
   if (totales.disponible > 0 && deltaDisponible >= 0) {
     alertas.push({ tipo: "good", icono: "✅", texto: `Vas mejor que ${MESES[prevRef.mes]}: ${fmtSignedDisplay(deltaDisponible)} frente al mes anterior.` });
+  }
+  if (deltaMediaDisponible > 0) {
+    alertas.push({ tipo: "good", icono: "📊", texto: `Tu disponible está ${fmtSignedDisplay(deltaMediaDisponible)} por encima de tu media anual.` });
   }
   if (alertas.length === 0) {
     alertas.push({ tipo: "good", icono: "👌", texto: "Mes estable: no hay alertas importantes en este momento." });
   }
-  const historialMeses = MESES.map((nombre, i) => ({ nombre, index: i, ...calcTotales(data, tab, año, i) }));
 
   const kpiData = [
     { label: "Ingresos",    val: vista === "mes" ? totales.ingresos   : totalesAnuales.ingresos,   color: "var(--green)",  cls: "income",    icon: "↑" },
@@ -2545,10 +2772,72 @@ export default function App() {
                 </div>
               </div>
 
+              {puedeEditarTabActual && (
+                <div className="toolbar" style={{ marginBottom: 20 }}>
+                  <input
+                    className="form-input"
+                    value={quickAddInput}
+                    onChange={(e) => setQuickAddInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && procesarQuickAdd()}
+                    placeholder="+ 12 gasolina · + 35 supermercado"
+                    style={{ flex: 1, minWidth: 220 }}
+                  />
+                  <button className="btn-primary" onClick={procesarQuickAdd}>⚡ Añadir rápido</button>
+                  <button className="btn-secondary" onClick={duplicarMesAnterior}>📋 Duplicar mes anterior</button>
+                </div>
+              )}
+
+              <div className="insight-grid" style={{ marginBottom: 20 }}>
+                <div className="mini-card">
+                  <div className="mini-card-title">Predicción fin de mes</div>
+                  <div className="mini-card-value nums" style={{ color: prediccionDisponibleFinal >= 0 ? "var(--green)" : "var(--red)" }}>
+                    {fmtSignedDisplay(prediccionDisponibleFinal)}
+                  </div>
+                  <div className="mini-card-sub">
+                    {esMesActual
+                      ? `Media diaria ${fmtDisplay(gastoDiarioMedio)} · ${diasRestantes} días restantes · automatismos pendientes ${fmtDisplay(gastosFijosPendientes)}`
+                      : `Mes cerrado. Gasto final ${fmtDisplay(totales.gastos)}.`}
+                  </div>
+                </div>
+                <div className="mini-card">
+                  <div className="mini-card-title">Presupuesto del mes</div>
+                  <div className="mini-card-value nums" style={{ color: totalPresupuestadoMes > 0 && totales.gastos > totalPresupuestadoMes ? "var(--red)" : "var(--accent2)" }}>
+                    {totalPresupuestadoMes > 0 ? fmtDisplay(totalPresupuestadoMes) : "Sin definir"}
+                  </div>
+                  <div className="mini-card-sub">
+                    {totalPresupuestadoMes > 0
+                      ? `Llevas ${fmtDisplay(totales.gastos)} · ${fmtPct((totales.gastos / totalPresupuestadoMes) * 100)} consumido`
+                      : "Define presupuestos por categoría desde cada gasto."}
+                  </div>
+                </div>
+              </div>
+
+              <div className="history-card" style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 15, fontWeight: 700 }}>Control de categorías</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Busca apartados y ordénalos por impacto o por nombre.</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input
+                      className="form-input"
+                      value={busquedaCategoria}
+                      onChange={(e) => setBusquedaCategoria(e.target.value)}
+                      placeholder="Buscar categoría"
+                      style={{ width: 180 }}
+                    />
+                    <select className="form-input" value={ordenCategorias} onChange={(e) => setOrdenCategorias(e.target.value)} style={{ width: 170 }}>
+                      <option value="impacto">Ordenar por impacto</option>
+                      <option value="alfabetico">Orden alfabético</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <Seccion
                 titulo="Ingresos"
                 color="var(--green)"
-                cats={cats.ingresos}
+                cats={catsFiltradas.ingresos}
                 seccion="ingresos"
                 tipo={tab}
                 getValor={getValor}
@@ -2556,12 +2845,14 @@ export default function App() {
                 total={totales.ingresos}
                 editable={puedeEditarTabActual}
                 data={data}
+                getBudget={getPresupuestoCategoria}
+                getAutoSummary={getResumenAutomatismoCategoria}
               />
 
               <Seccion
                 titulo="Gastos"
                 color="var(--orange)"
-                cats={cats.gastos}
+                cats={catsFiltradas.gastos}
                 seccion="gastos"
                 tipo={tab}
                 getValor={getValor}
@@ -2569,6 +2860,8 @@ export default function App() {
                 total={totales.gastos}
                 editable={puedeEditarTabActual}
                 data={data}
+                getBudget={getPresupuestoCategoria}
+                getAutoSummary={getResumenAutomatismoCategoria}
               />
 
               <div className="insight-grid single-card">
@@ -2649,14 +2942,15 @@ export default function App() {
             </div>
 
               <div className="history-card">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 15, fontWeight: 700 }}>Historial del año</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Resumen rápido del disponible por mes.</div>
+                    <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 15, fontWeight: 700 }}>Evolución del disponible</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Pulsa un mes para saltar directamente.</div>
                   </div>
                   <div className="nums" style={{ fontSize: 12, color: "var(--subtle)", fontWeight: 700 }}>{año}</div>
                 </div>
-                <div className="history-grid">
+                <TrendBars items={historialMeses} activeIndex={mes} onSelect={(index) => setMes(index)} />
+                <div className="history-grid" style={{ marginTop: 16 }}>
                   {historialMeses.map((item) => (
                     <div key={item.index} className={`history-item ${item.index === mes ? "active" : ""}`}>
                       <div>
@@ -2670,6 +2964,43 @@ export default function App() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="section-card" style={{ marginBottom: 20 }}>
+                <div className="section-header open">
+                  <div className="section-title-wrap">
+                    <div style={{ width: 38, height: 38, borderRadius: 12, background: "rgba(34,208,122,0.14)", border: "1px solid rgba(34,208,122,0.20)", display: "grid", placeItems: "center", fontSize: 18 }}>🧾</div>
+                    <div>
+                      <div className="section-title syne">Timeline del mes</div>
+                      <div className="section-count">{timelineMes.length} movimientos e importes registrados</div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ padding: "0 16px 16px" }}>
+                  {timelineMes.length === 0 ? (
+                    <div style={{ padding: "14px 16px", borderRadius: 16, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)", fontSize: 13 }}>
+                      Aún no hay movimientos en este mes.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {timelineMes.slice(0, 12).map((mov) => (
+                        <div key={mov.id} className="mov-item" style={{ marginBottom: 0 }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: mov.seccion === "ingresos" ? "var(--green)" : "var(--text)" }}>
+                              {getEmojiCategoria(data, tab, mov.seccion, mov.categoria)} {mov.categoria}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                              {formatearFecha(mov.fecha)} · {mov.nota || (mov.seccion === "ingresos" ? "Ingreso" : "Gasto")}{mov.automatico ? " · automático" : ""}
+                            </div>
+                          </div>
+                          <div className="nums" style={{ fontSize: 14, fontWeight: 800, color: mov.seccion === "ingresos" ? "var(--green)" : (mov.importe < 0 ? "var(--green)" : "var(--orange)") }}>
+                            {mov.seccion === "ingresos" ? fmtDisplay(Math.abs(mov.importe)) : fmtDisplay(Math.abs(mov.importe))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3039,6 +3370,31 @@ export default function App() {
         </div>
       )}
 
+      {/* ─── MODAL: Budget ─── */}
+      {modalPresupuestoAbierto && (
+        <div className="modal-overlay" style={{ alignItems: "center" }} onClick={() => setModalPresupuestoAbierto(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Presupuesto por categoría</div>
+            <div className="modal-subtitle">Define el límite ideal para {categoriaPresupuesto || "esta categoría"}.</div>
+            <div className="input-group" style={{ marginBottom: 18 }}>
+              <input
+                type="number"
+                inputMode="decimal"
+                className="form-input-lg nums"
+                value={valorPresupuesto}
+                onChange={(e) => setValorPresupuesto(e.target.value)}
+                placeholder="0,00"
+              />
+              <span className="input-suffix">€</span>
+            </div>
+            <div className="choice-grid">
+              <button className="choice-btn" onClick={() => setModalPresupuestoAbierto(false)}>Cancelar</button>
+              <button className="choice-btn active-blue" style={{ fontWeight: 800 }} onClick={guardarPresupuestoCategoria}>Guardar presupuesto</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── MODAL: Edit Movement ─── */}
       {modalAbierto && editando && (
         <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
@@ -3051,9 +3407,21 @@ export default function App() {
             <div style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
               {getEmojiCategoria(data, editando.tipo, editando.seccion, editando.cat)} {editando.cat}
             </div>
-            <div style={{ fontSize: 13, color: "var(--accent2)", marginBottom: 22 }}>
+            <div style={{ fontSize: 13, color: "var(--accent2)", marginBottom: 12 }}>
               Total actual: {fmtDisplay(getValor(editando.tipo, editando.seccion, editando.cat))}
             </div>
+            {editando.seccion === "gastos" && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
+                <button className="btn-secondary" style={{ padding: "9px 12px", borderRadius: 10 }} onClick={() => abrirPresupuestoCategoria(editando.cat)}>
+                  🎯 Presupuesto {getPresupuestoCategoria(data, tab, editando.cat) > 0 ? fmtDisplay(getPresupuestoCategoria(data, tab, editando.cat)) : "sin definir"}
+                </button>
+                {getResumenAutomatismoCategoria(data, tab, editando.cat) && (
+                  <div className="btn-secondary" style={{ padding: "9px 12px", borderRadius: 10, cursor: "default" }}>
+                    🔁 Automatizado día {getResumenAutomatismoCategoria(data, tab, editando.cat).proximoDia}
+                  </div>
+                )}
+              </div>
+            )}
 
             {!usandoMovimientos && (
               <div style={{ marginBottom: 20 }}>
