@@ -505,6 +505,7 @@ const GLOBAL_CSS = `
   }
 
   .modal-sheet {
+    position: relative;
     background: var(--card);
     width: 100%;
     max-width: 520px;
@@ -514,6 +515,32 @@ const GLOBAL_CSS = `
     padding: 28px 24px 44px;
     border: 1px solid var(--border2);
     border-bottom: none;
+  }
+
+  .modal-close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border2);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    font-size: 28px;
+    line-height: 1;
+    transition: all 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 2;
+  }
+  .modal-close-btn:hover {
+    color: var(--text);
+    background: #eef4ff;
+    border-color: #c7daf6;
+    transform: scale(1.03);
   }
 
   .modal-handle {
@@ -3355,6 +3382,14 @@ export default function App() {
       {modalAbierto && editando && (
         <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
           <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close-btn"
+              aria-label="Cerrar"
+              onClick={() => setModalAbierto(false)}
+            >
+              ×
+            </button>
             <div className="modal-handle" />
 
             <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase", marginBottom: 4 }}>
